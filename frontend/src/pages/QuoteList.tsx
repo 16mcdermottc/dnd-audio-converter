@@ -1,9 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Quote, Search, User, Shield, MessageSquare } from 'lucide-react';
+import { Persona } from '../types';
+
+interface QuoteItem {
+    id: string;
+    persona: Persona;
+    context: string | null;
+    text: string;
+}
 
 export default function QuoteList() {
-    const [personas, setPersonas] = useState([]);
+    const [personas, setPersonas] = useState<Persona[]>([]);
     const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
 
@@ -22,7 +30,7 @@ export default function QuoteList() {
     }, []);
 
     // Extract all quotes from all personas
-    const allQuotes = personas.flatMap(persona => {
+    const allQuotes: QuoteItem[] = personas.flatMap(persona => {
         if (!persona.memorable_quotes) return [];
         return persona.memorable_quotes.split('\n')
             .filter(line => line.trim())

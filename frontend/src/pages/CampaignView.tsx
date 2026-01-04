@@ -1,18 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { ArrowLeft, Upload, FileText, Mic, Trash2, X, TrendingUp, TrendingDown, Quote, Scroll, User, Shield, Sparkles } from 'lucide-react';
+import { ArrowLeft, Upload, FileText, Mic, Trash2, X, TrendingUp, TrendingDown, Quote, User, Shield, Sparkles } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Campaign, Session, Persona } from '../types';
 
 export default function CampaignView() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [campaign, setCampaign] = useState(null);
-  const [sessions, setSessions] = useState([]);
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [personas, setPersonas] = useState([]);
-  const [selectedPersona, setSelectedPersona] = useState(null);
+  const [personas, setPersonas] = useState<Persona[]>([]);
+  const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
 
   useEffect(() => {
     fetchData();
@@ -28,7 +29,7 @@ export default function CampaignView() {
       setCampaign(campRes.data);
       setSessions(sessRes.data);
       setPersonas(persRes.data);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       if (err.response?.status === 404) navigate('/');
     } finally {
@@ -36,7 +37,7 @@ export default function CampaignView() {
     }
   };
 
-  const handleDeleteSession = async (sessionId, e) => {
+  const handleDeleteSession = async (sessionId: number, e: React.MouseEvent) => {
       e.stopPropagation();
       if(!window.confirm("Delete this session? This cannot be undone.")) return;
       
@@ -48,6 +49,41 @@ export default function CampaignView() {
           alert("Failed to delete session");
       }
   };
+
+  const parseListString = (content: string): string[] => {
+    if (!content) return [];
+    
+    const trimmed = content.trim();
+    // Check for Python list string format: ['start', 'end']
+    if (trimmed.startsWith("['") && trimmed.endsWith("']")) {
+      try {
+        // Remove brackets
+        const inner = trimmed.substring(1, trimmed.length - 1);
+        // Split by key tokens: ', ' (quote comma space quote)
+        // This is a naive parser but works for the expected simple format
+        // A more robust regex approach: /'(.*?)'/g
+        const matches = inner.match(/'(.*?)'/g);
+        if (matches) {
+            return matches.map(m => m.replace(/^'|'$/g, '').replace(/\\'/g, "'"));
+        }
+      } catch (e) {
+        console.warn("Failed to parse list string, falling back to split", e);
+      }
+    }
+    
+    // Fallback or double check for double quotes
+    if (trimmed.startsWith('["') && trimmed.endsWith('"]')) {
+         try {
+            return JSON.parse(trimmed);
+         } catch (e) {
+             console.warn("Failed to parse JSON list, falling back to split", e);
+         }
+    }
+
+    return content.split('\n');
+  };
+
+  // ... (rest of the component)
 
   if (loading) return <div className="p-12 text-center text-slate-500">Loading Realm...</div>;
   if (!campaign) return null;
@@ -253,7 +289,7 @@ export default function CampaignView() {
                                         <TrendingUp size={14} /> HIGHLIGHTS
                                     </h4>
                                     <ul className="list-disc pl-5 space-y-2 text-green-200/80 text-sm">
-                                        {selectedPersona.highlights.split('\n').map((line, i) => (
+                                        {parseListString(selectedPersona.highlights).map((line, i) => (
                                             <li key={i}>{line.replace(/^\[.*?\] /, '')}</li>
                                         ))}
                                     </ul>
@@ -266,7 +302,7 @@ export default function CampaignView() {
                                         <TrendingDown size={14} /> LOW POINTS
                                     </h4>
                                     <ul className="list-disc pl-5 space-y-2 text-red-200/80 text-sm">
-                                        {selectedPersona.low_points.split('\n').map((line, i) => (
+                                        {parseListString(selectedPersona.low_points).map((line, i) => (
                                             <li key={i}>{line.replace(/^\[.*?\] /, '')}</li>
                                         ))}
                                     </ul>
@@ -281,7 +317,7 @@ export default function CampaignView() {
                                     <Quote size={14} /> MEMORABLE QUOTES
                                 </h4>
                                 <div className="space-y-4 relative z-10">
-                                     {selectedPersona.memorable_quotes.split('\n').map((line, i) => (
+                                     {parseListString(selectedPersona.memorable_quotes).map((line, i) => (
                                         <div key={i} className="pl-4 border-l-2 border-purple-500/30 text-slate-300">
                                             "{line.replace(/^\[.*?\] /, '')}"
                                         </div>

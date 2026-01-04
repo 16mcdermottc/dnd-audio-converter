@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
-import { Play, Calendar, Clock, ChevronRight, Loader2 } from 'lucide-react';
+import { Play, Calendar, ChevronRight, Loader2 } from 'lucide-react';
+import { Session } from '../types';
 
 export default function Dashboard() {
-  const [sessions, setSessions] = useState([]);
+  const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -68,7 +69,7 @@ export default function Dashboard() {
   );
 }
 
-function StatCard({ label, value }) {
+function StatCard({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="bg-slate-800 p-6 rounded-xl border border-slate-700">
       <div className="text-slate-400 text-sm font-medium mb-1">{label}</div>
@@ -77,8 +78,8 @@ function StatCard({ label, value }) {
   );
 }
 
-function SessionCard({ session }) {
-  const statusColors = {
+function SessionCard({ session }: { session: Session }) {
+  const statusColors: Record<string, string> = {
     pending: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
     processing: "bg-blue-500/10 text-blue-500 border-blue-500/20",
     completed: "bg-green-500/10 text-green-500 border-green-500/20",
@@ -105,7 +106,7 @@ function SessionCard({ session }) {
       </div>
       
       <Link 
-        to={`/session/${session.id}`}
+        to={`/sessions/${session.id}`}
         className="p-2 text-slate-500 hover:text-white transition-colors"
       >
         <ChevronRight size={24} />

@@ -1,21 +1,28 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
-import { User, Shield, Scroll, Loader2, Pencil, Trash2, Quote, TrendingUp, TrendingDown, GitMerge, Check, X } from 'lucide-react';
+import { User, Shield, Scroll, Loader2, Pencil, Trash2, Quote, TrendingUp, TrendingDown, GitMerge, X } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import { Persona } from '../types';
 
 export default function PersonaList() {
-  const [personas, setPersonas] = useState([]);
+  const [personas, setPersonas] = useState<Persona[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
   // Merge State
   const [mergeMode, setMergeMode] = useState(false);
-  const [mergeSource, setMergeSource] = useState(null);
+  const [mergeSource, setMergeSource] = useState<Persona | null>(null);
   
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+      name: string;
+      role: string;
+      description: string;
+      voice_description: string;
+      player_name: string;
+  }>({
       name: '',
       role: 'NPC',
       description: '',
@@ -38,7 +45,7 @@ export default function PersonaList() {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
       setCreating(true);
       try {
@@ -60,7 +67,7 @@ export default function PersonaList() {
       }
   };
 
-  const handleEdit = (persona) => {
+  const handleEdit = (persona: Persona) => {
       if (mergeMode) return; // Disable edit in merge mode
       setFormData({
           name: persona.name,
@@ -74,7 +81,7 @@ export default function PersonaList() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number) => {
       if (mergeMode) return;
       if (!window.confirm("Are you sure you want to delete this persona?")) return;
       try {
@@ -93,7 +100,7 @@ export default function PersonaList() {
   }
 
   // Merge Logic
-  const handleMergeClick = (persona) => {
+  const handleMergeClick = (persona: Persona) => {
       if (!mergeSource) {
           // Select Source
           setMergeSource(persona);
@@ -108,7 +115,8 @@ export default function PersonaList() {
       }
   };
 
-  const executeMerge = async (targetPersona) => {
+  const executeMerge = async (targetPersona: Persona) => {
+      if (!mergeSource) return;
       if (!window.confirm(`Merge "${mergeSource.name}" into "${targetPersona.name}"? This cannot be undone.`)) {
           return;
       }
@@ -324,7 +332,16 @@ export default function PersonaList() {
   );
 }
 
-function PersonaCard({ persona, onEdit, onDelete, mergeMode, isMergeSource, onMergeClick }) {
+interface PersonaCardProps {
+  persona: Persona;
+  onEdit: (p: Persona) => void;
+  onDelete: (id: number) => void;
+  mergeMode: boolean;
+  isMergeSource: boolean;
+  onMergeClick: (p: Persona) => void;
+}
+
+function PersonaCard({ persona, onEdit, onDelete, mergeMode, isMergeSource, onMergeClick }: PersonaCardProps) {
   const isPC = persona.role === 'PC';
   
   return (
@@ -449,7 +466,7 @@ function PersonaCard({ persona, onEdit, onDelete, mergeMode, isMergeSource, onMe
   );
 }
 
-function FormattedQuoteLine({ line }) {
+function FormattedQuoteLine({ line }: { line: string }) {
     const match = line.match(/^\[(.*?)\] (.*)$/);
     if (!match) return <p className="mb-1">"{line.replace(/^\[.*?\] /, '')}"</p>;
 
@@ -482,7 +499,7 @@ function FormattedQuoteLine({ line }) {
     );
 }
 
-function FormattedPointLine({ line, titleColor }) {
+function FormattedPointLine({ line, titleColor }: { line: string; titleColor: string }) {
     const match = line.match(/^\[(.*?)\] (.*)$/);
     if (!match) return <p className="mb-1">{line}</p>;
 

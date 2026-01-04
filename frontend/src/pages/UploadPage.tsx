@@ -1,29 +1,31 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import { UploadCloud, FileAudio, CheckCircle, Loader2, FileText, X, HardDrive } from 'lucide-react';
+import { UploadCloud, FileAudio, Loader2, FileText } from 'lucide-react';
 
 export default function UploadPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const campaignId = searchParams.get('campaign_id');
   
-  const [activeTab, setActiveTab] = useState('audio'); // 'audio', 'text', 'local'
+  const [activeTab, setActiveTab] = useState<'audio' | 'text'>('audio');
   const [sessionName, setSessionName] = useState('');
-  const [files, setFiles] = useState([]);
-  const [localPaths, setLocalPaths] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
   const [textContent, setTextContent] = useState('');
+ 
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [status, setStatus] = useState(null);
+  const [, setStatus] = useState<'success' | 'error' | null>(null);
 
-  const handleFileChange = (e) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFiles(Array.from(e.target.files));
     }
   };
 
-  const handleUpload = async (e) => {
+
+
+  const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!campaignId) {
         alert("No campaign selected!");
@@ -46,26 +48,16 @@ export default function UploadPage() {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 0,
           onUploadProgress: (progressEvent) => {
-            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-            setProgress(percentCompleted);
+            if (progressEvent.total) {
+                const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                setProgress(percentCompleted);
+            }
           },
         });
-      } else if (activeTab === 'local') {
-         // Local File Import
-         if (!localPaths || !sessionName) return;
-         const paths = localPaths.split('\n').filter(p => p.trim() !== '');
-         
-         await axios.post(`http://localhost:8000/import_local_session/`, {
-             name: sessionName,
-             file_paths: paths,
-             campaign_id: parseInt(campaignId)
-         });
-         setProgress(100);
-
       } else {
         // Text Import
         if (!textContent || !sessionName) return;
-        // Also direct call for consistency, though less critical
+        
         await axios.post(`http://localhost:8000/import_session_text/`, {
             name: sessionName,
             content: textContent,
@@ -75,9 +67,8 @@ export default function UploadPage() {
       }
       
       setStatus('success');
-      setStatus('success');
       navigate(`/campaigns/${campaignId}`);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       setStatus('error');
       alert(err.response?.data?.detail || "Upload failed");
@@ -90,7 +81,7 @@ export default function UploadPage() {
     <div className="p-8 max-w-4xl mx-auto">
       <header className="mb-8">
         <h2 className="text-3xl font-bold text-white mb-2">Add New Session</h2>
-        <p className="text-slate-400">Upload audio recordings or paste text summaries.</p>
+        <p className="text-slate-400">Upload audio recordings or text summaries.</p>
       </header>
 
       <div className="bg-slate-800 rounded-xl p-8 border border-slate-700 shadow-xl">
@@ -103,13 +94,6 @@ export default function UploadPage() {
             >
                 <FileAudio size={18} />
                 Audio Upload
-            </button>
-            <button 
-                onClick={() => setActiveTab('local')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${activeTab === 'local' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:bg-slate-700'}`}
-            >
-                <HardDrive size={18} />
-                Local Files
             </button>
             <button 
                 onClick={() => setActiveTab('text')}
@@ -161,19 +145,6 @@ export default function UploadPage() {
                   </div>
                 </div>
               </div>
-          ) : activeTab === 'local' ? (
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Absolute File Paths (One per line)
-                </label>
-                <textarea
-                    value={localPaths}
-                    onChange={(e) => setLocalPaths(e.target.value)}
-                    className="w-full h-32 bg-slate-900 border border-slate-600 rounded-lg p-3 text-white focus:ring-2 focus:ring-purple-500 outline-none font-mono text-sm"
-                    placeholder={`C:\\Users\\Game\\Session1.wav\nC:\\Users\\Game\\Session1_Part2.wav`}
-                />
-                <p className="text-xs text-slate-500 mt-1">Files must be accessible by the server. Large files and .wav files will be automatically compressed/converted.</p>
-              </div>
           ) : (
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
@@ -218,9 +189,9 @@ export default function UploadPage() {
 
           <button 
             type="submit" 
-            disabled={(!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent) || (activeTab === 'local' && !localPaths)) || uploading}
+            disabled={(!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent)) || uploading}
             className={`w-full py-4 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-              (!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent) || (activeTab === 'local' && !localPaths)) || uploading
+              (!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent)) || uploading
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/40'
             }`}

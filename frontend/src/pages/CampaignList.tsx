@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { Book, Plus, Loader2, Map, Trash2 } from 'lucide-react';
+import { Campaign } from '../types';
 
 export default function CampaignList() {
-  const [campaigns, setCampaigns] = useState([]);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
@@ -25,7 +26,7 @@ export default function CampaignList() {
     }
   };
 
-  const handleCreate = async (e) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreating(true);
     try {
@@ -44,7 +45,7 @@ export default function CampaignList() {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async (id: number) => {
     if (!window.confirm("Are you sure you want to delete this campaign? This will delete all associated sessions and personas.")) return;
     
     try {
@@ -88,7 +89,7 @@ export default function CampaignList() {
                 <Link to={`/campaigns/${campaign.id}`} key={campaign.id} className="block">
                     <div className="bg-slate-800 border border-slate-700 rounded-xl p-6 hover:border-purple-500/50 transition-all hover:shadow-lg hover:shadow-purple-900/10 h-full flex flex-col group relative">
                         <button
-                            onClick={(e) => {
+                            onClick={(e: React.MouseEvent) => {
                                 e.preventDefault();
                                 handleDelete(campaign.id);
                             }}

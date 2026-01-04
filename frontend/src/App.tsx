@@ -1,7 +1,5 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, UploadCloud, Mic, BookOpen, Users, User, Quote } from 'lucide-react';
-import Dashboard from './pages/Dashboard';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+import { LayoutDashboard, User, Quote } from 'lucide-react';
 import SessionView from './pages/SessionView';
 import UploadPage from './pages/UploadPage';
 import PersonaList from './pages/PersonaList';
@@ -45,7 +43,7 @@ function App() {
   );
 }
 
-function NavLink({ to, icon, label }) {
+function NavLink({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   return (
     <Link 
       to={to} 
