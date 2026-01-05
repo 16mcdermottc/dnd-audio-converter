@@ -1,21 +1,20 @@
-import React, { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { UploadCloud, FileAudio, Loader2, FileText } from 'lucide-react';
+import { FileAudio, FileText, Loader2, UploadCloud } from 'lucide-react';
+import React, { useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 
 export default function UploadPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const campaignId = searchParams.get('campaign_id');
   
   const [activeTab, setActiveTab] = useState<'audio' | 'text'>('audio');
   const [sessionName, setSessionName] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [textContent, setTextContent] = useState('');
- 
-  const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [, setStatus] = useState<'success' | 'error' | null>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -23,28 +22,17 @@ export default function UploadPage() {
     }
   };
 
-
-
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!campaignId) {
-        alert("No campaign selected!");
-        return;
-    }
-    
-    setUploading(true);
-    setProgress(0);
-
-    try {
-      if (activeTab === 'audio') {
-        if (files.length === 0 || !sessionName) return;
+  const uploadAudioMutation = useMutation({
+    mutationFn: async () => {
+        if (!campaignId || files.length === 0 || !sessionName) return;
         const formData = new FormData();
         files.forEach((file) => {
           formData.append('files', file);
         });
-        
+
         // Bypass Vite proxy for large uploads to avoid timeouts
-        await axios.post(`http://localhost:8000/upload_session/?name=${encodeURIComponent(sessionName)}&campaign_id=${campaignId}`, formData, {
+        // Note: keeping the localhost URL as per original. In prod this should be relative or env var driven.
+        return axios.post(`http://localhost:8000/upload_session/?name=${encodeURIComponent(sessionName)}&campaign_id=${campaignId}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 0,
           onUploadProgress: (progressEvent) => {
@@ -54,28 +42,56 @@ export default function UploadPage() {
             }
           },
         });
-      } else {
-        // Text Import
-        if (!textContent || !sessionName) return;
-        
-        await axios.post(`http://localhost:8000/import_session_text/`, {
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['sessions'] }); 
+        queryClient.invalidateQueries({ queryKey: ['campaign', parseInt(campaignId || '0')] });
+        navigate(`/campaigns/${campaignId}`);
+    },
+    onError: (err: any) => {
+        console.error(err);
+        alert(err.response?.data?.detail || "Upload failed");
+    }
+  });
+
+  const importTextMutation = useMutation({
+    mutationFn: async () => {
+         if (!campaignId || !textContent || !sessionName) return;
+         return axios.post(`http://localhost:8000/import_session_text/`, {
             name: sessionName,
             content: textContent,
             campaign_id: parseInt(campaignId)
         });
+    },
+    onSuccess: () => {
         setProgress(100);
-      }
-      
-      setStatus('success');
-      navigate(`/campaigns/${campaignId}`);
-    } catch (err: any) {
-      console.error(err);
-      setStatus('error');
-      alert(err.response?.data?.detail || "Upload failed");
-    } finally {
-      setUploading(false);
+        queryClient.invalidateQueries({ queryKey: ['sessions'] });
+        queryClient.invalidateQueries({ queryKey: ['campaign', parseInt(campaignId || '0')] });
+        navigate(`/campaigns/${campaignId}`);
+    },
+    onError: (err: any) => {
+        console.error(err);
+        alert(err.response?.data?.detail || "Import failed");
+    }
+  });
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!campaignId) {
+        alert("No campaign selected!");
+        return;
+    }
+    
+    setProgress(0);
+
+    if (activeTab === 'audio') {
+        uploadAudioMutation.mutate();
+    } else {
+        importTextMutation.mutate();
     }
   };
+
+  const isUploading = uploadAudioMutation.isPending || importTextMutation.isPending;
 
   return (
     <div className="p-8 max-w-4xl mx-auto">
@@ -159,7 +175,7 @@ export default function UploadPage() {
               </div>
           )}
 
-          {uploading && (
+          {isUploading && (
             <div className="space-y-2">
                <div className="flex justify-between text-sm text-slate-400">
                  <span className="flex items-center gap-2">
@@ -189,14 +205,14 @@ export default function UploadPage() {
 
           <button 
             type="submit" 
-            disabled={(!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent)) || uploading}
+            disabled={(!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent)) || isUploading}
             className={`w-full py-4 rounded-lg font-bold text-lg transition-all flex items-center justify-center gap-2 ${
-              (!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent)) || uploading
+              (!sessionName || (activeTab === 'audio' && files.length === 0) || (activeTab === 'text' && !textContent)) || isUploading
                 ? 'bg-slate-700 text-slate-500 cursor-not-allowed'
                 : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/40'
             }`}
           >
-            {uploading ? (
+            {isUploading ? (
                 <>
                     <Loader2 className="animate-spin" />
                     {activeTab === 'text' ? 'Importing...' : 'Processing...'}

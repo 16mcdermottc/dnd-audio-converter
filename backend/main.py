@@ -1,6 +1,7 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, BackgroundTasks
 from sqlmodel import SQLModel, create_engine, Session as DBSession, select
-from .models import Session, Transcript, Persona, Moment, Campaign
+from .models import Session, Transcript, Persona, Moment, Campaign, Highlight, Quote, PersonaRead
+from sqlalchemy.orm import selectinload
 import os
 import aiofiles
 from typing import List
@@ -265,14 +266,18 @@ def list_personas(campaign_id: int = None, db: DBSession = Depends(get_session))
         query = query.where(Persona.campaign_id == campaign_id)
     return db.exec(query).all()
 
-@app.get("/personas/{persona_id}", response_model=Persona)
+@app.get("/personas/{persona_id}", response_model=PersonaRead)
 def get_persona(persona_id: int, db: DBSession = Depends(get_session)):
-    persona = db.get(Persona, persona_id)
+    statement = select(Persona).where(Persona.id == persona_id).options(
+        selectinload(Persona.highlights_list),
+        selectinload(Persona.quotes_list)
+    )
+    persona = db.exec(statement).first()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
     return persona
 
-@app.post("/personas/", response_model=Persona)
+@app.post("/personas/", response_model=PersonaRead)
 def create_persona(persona: Persona, db: DBSession = Depends(get_session)):
     # Basic CRUD for manual overrides
     db.add(persona)
@@ -280,7 +285,7 @@ def create_persona(persona: Persona, db: DBSession = Depends(get_session)):
     db.refresh(persona)
     return persona
 
-@app.put("/personas/{persona_id}", response_model=Persona)
+@app.put("/personas/{persona_id}", response_model=PersonaRead)
 def update_persona(persona_id: int, persona_update: Persona, db: DBSession = Depends(get_session)):
     db_persona = db.get(Persona, persona_id)
     if not db_persona:
@@ -315,7 +320,19 @@ def merge_personas(request: MergePersonaRequest, db: DBSession = Depends(get_ses
     if not target or not source:
         raise HTTPException(status_code=404, detail="One or both personas not found")
     
-    # Helper for appending
+    # 1. Reassign Highlights
+    source_highlights = db.exec(select(Highlight).where(Highlight.persona_id == source.id)).all()
+    for hl in source_highlights:
+        hl.persona_id = target.id
+        db.add(hl)
+
+    # 2. Reassign Quotes
+    source_quotes = db.exec(select(Quote).where(Quote.persona_id == source.id)).all()
+    for qt in source_quotes:
+        qt.persona_id = target.id
+        db.add(qt)
+
+    # 3. Merge legacy string fields (just in case they still exist/matter)
     def append_text(orig, new):
         if not new or new == "None": return orig
         if not orig: return new
@@ -337,7 +354,59 @@ def merge_personas(request: MergePersonaRequest, db: DBSession = Depends(get_ses
     db.delete(source)
     db.commit()
     db.refresh(target)
+    # Re-fetch to display all new relations
+    db.refresh(target) 
     return target
+
+# --- Highlight & Quote APIs ---
+
+@app.put("/highlights/{id}", response_model=Highlight)
+def update_highlight(id: int, hl_data: Highlight, db: DBSession = Depends(get_session)):
+    hl = db.get(Highlight, id)
+    if not hl:
+        raise HTTPException(status_code=404, detail="Highlight not found")
+    
+    hl.text = hl_data.text
+    hl.persona_id = hl_data.persona_id
+    hl.type = hl_data.type
+    
+    db.add(hl)
+    db.commit()
+    db.refresh(hl)
+    return hl
+
+@app.delete("/highlights/{id}")
+def delete_highlight(id: int, db: DBSession = Depends(get_session)):
+    hl = db.get(Highlight, id)
+    if not hl:
+        raise HTTPException(status_code=404, detail="Highlight not found")
+    db.delete(hl)
+    db.commit()
+    return {"ok": True}
+
+@app.put("/quotes/{id}", response_model=Quote)
+def update_quote(id: int, qt_data: Quote, db: DBSession = Depends(get_session)):
+    qt = db.get(Quote, id)
+    if not qt:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    
+    qt.text = qt_data.text
+    qt.persona_id = qt_data.persona_id
+    qt.speaker_name = qt_data.speaker_name
+    
+    db.add(qt)
+    db.commit()
+    db.refresh(qt)
+    return qt
+
+@app.delete("/quotes/{id}")
+def delete_quote(id: int, db: DBSession = Depends(get_session)):
+    qt = db.get(Quote, id)
+    if not qt:
+        raise HTTPException(status_code=404, detail="Quote not found")
+    db.delete(qt)
+    db.commit()
+    return {"ok": True}
 
 # --- Moment APIs ---
 

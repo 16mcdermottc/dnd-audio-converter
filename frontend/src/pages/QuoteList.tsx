@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
-import { Quote, Search, User, Shield, MessageSquare } from 'lucide-react';
+import { Loader2, MessageSquare, Quote, Search, Shield, User } from 'lucide-react';
+import { useState } from 'react';
 import { Persona } from '../types';
 
 interface QuoteItem {
@@ -11,25 +12,19 @@ interface QuoteItem {
 }
 
 export default function QuoteList() {
-    const [personas, setPersonas] = useState<Persona[]>([]);
-    const [loading, setLoading] = useState(true);
     const [filter, setFilter] = useState('');
 
-    useEffect(() => {
-        const fetchPersonas = async () => {
-            try {
-                const res = await axios.get('/api/personas/');
-                setPersonas(res.data);
-            } catch (err) {
-                console.error("Failed to fetch personas", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-        fetchPersonas();
-    }, []);
+    const { data: personas = [], isLoading } = useQuery<Persona[]>({
+        queryKey: ['personas'],
+        queryFn: async () => {
+             const res = await axios.get('/api/personas/');
+             return res.data;
+        }
+    });
 
     // Extract all quotes from all personas
+    // Memoizing this might be good, but React Query handles data stability well enough for now.
+    // If performance issues arise, we can wrap this in useMemo dependent on 'personas'.
     const allQuotes: QuoteItem[] = personas.flatMap(persona => {
         if (!persona.memorable_quotes) return [];
         return persona.memorable_quotes.split('\n')
@@ -61,7 +56,7 @@ export default function QuoteList() {
                 }
 
                 return items.map(text => ({
-                    id: Math.random().toString(36).substr(2, 9), // Temp ID
+                    id: Math.random().toString(36).substr(2, 9), // Temp ID. Since we don't have stable IDs for these derived quotes, keys might be unstable on refetch.
                     persona: persona,
                     context,
                     // Clean up specific raw text issues if they persist (outer quotes etc)
@@ -76,7 +71,7 @@ export default function QuoteList() {
         (q.context && q.context.toLowerCase().includes(filter.toLowerCase()))
     );
 
-    if (loading) return <div className="p-12 text-center text-slate-500">Listening to whispers...</div>;
+    if (isLoading) return <div className="p-12 text-center text-slate-500 flex justify-center"><Loader2 className="animate-spin text-purple-500" /></div>;
 
     return (
         <div className="p-8 max-w-5xl mx-auto">

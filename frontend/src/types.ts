@@ -32,6 +32,26 @@ export interface Persona {
   memorable_quotes?: string;
   summary?: string;
   player_name?: string;
+  highlights_list?: Highlight[];
+  quotes_list?: Quote[];
+}
+
+export interface Highlight {
+  id: number;
+  text: string;
+  type: 'high' | 'low';
+  session_id: number;
+  persona_id?: number;
+  campaign_id: number;
+}
+
+export interface Quote {
+  id: number;
+  text: string;
+  speaker_name?: string;
+  session_id: number;
+  persona_id?: number;
+  campaign_id: number;
 }
 
 export interface Moment {

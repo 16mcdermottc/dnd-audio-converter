@@ -1,14 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { User, Shield, Scroll, Loader2, Pencil, Trash2, Quote, TrendingUp, TrendingDown, GitMerge, X } from 'lucide-react';
+import { GitMerge, Loader2, Pencil, Quote, Scroll, Shield, Trash2, TrendingDown, TrendingUp, User, X } from 'lucide-react';
+import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Persona } from '../types';
 
 export default function PersonaList() {
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
-  const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -30,40 +29,82 @@ export default function PersonaList() {
       player_name: ''
   });
 
-  useEffect(() => {
-    fetchPersonas();
-  }, []);
-
-  const fetchPersonas = async () => {
-    try {
+  // Query
+  const { data: personas = [], isLoading } = useQuery<Persona[]>({
+    queryKey: ['personas'],
+    queryFn: async () => {
       const res = await axios.get('/api/personas/');
-      setPersonas(res.data);
-    } catch (err) {
-      console.error("Failed to fetch personas", err);
-    } finally {
-      setLoading(false);
+      return res.data;
     }
-  };
+  });
+
+  // Mutations
+  const createPersonaMutation = useMutation({
+    mutationFn: async (newPersona: typeof formData) => {
+      return axios.post('/api/personas/', newPersona);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['personas'] });
+      resetForm();
+    },
+    onError: (err) => {
+      console.error(err);
+      alert("Failed to create persona");
+    }
+  });
+
+  const updatePersonaMutation = useMutation({
+    mutationFn: async ({ id, data }: { id: number, data: typeof formData }) => {
+      return axios.put(`/api/personas/${id}`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['personas'] });
+      resetForm();
+    },
+    onError: (err) => {
+      console.error(err);
+      alert("Failed to update persona");
+    }
+  });
+
+  const deletePersonaMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return axios.delete(`/api/personas/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['personas'] });
+    },
+    onError: (err) => {
+      console.error(err);
+      alert("Failed to delete persona");
+    }
+  });
+
+  const mergePersonaMutation = useMutation({
+    mutationFn: async ({ targetId, sourceId }: { targetId: number, sourceId: number }) => {
+       return axios.post('/api/personas/merge', {
+           target_persona_id: targetId,
+           source_persona_id: sourceId
+       });
+    },
+    onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['personas'] });
+       setMergeSource(null);
+       setMergeMode(false);
+       alert("Merge successful");
+    },
+    onError: (err) => {
+       console.error(err);
+       alert("Failed to merge personas. ensure both exist.");
+    }
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
       e.preventDefault();
-      setCreating(true);
-      try {
-          if (editingId) {
-             // Update
-             const res = await axios.put(`/api/personas/${editingId}`, formData);
-             setPersonas(personas.map(p => p.id === editingId ? res.data : p));
-          } else {
-             // Create
-             const res = await axios.post('/api/personas/', formData);
-             setPersonas([...personas, res.data]);
-          }
-          resetForm();
-      } catch (err) {
-          console.error(err);
-          alert("Failed to save persona");
-      } finally {
-          setCreating(false);
+      if (editingId) {
+         updatePersonaMutation.mutate({ id: editingId, data: formData });
+      } else {
+         createPersonaMutation.mutate(formData);
       }
   };
 
@@ -84,20 +125,14 @@ export default function PersonaList() {
   const handleDelete = async (id: number) => {
       if (mergeMode) return;
       if (!window.confirm("Are you sure you want to delete this persona?")) return;
-      try {
-          await axios.delete(`/api/personas/${id}`);
-          setPersonas(personas.filter(p => p.id !== id));
-      } catch (err) {
-          console.error(err);
-          alert("Failed to delete persona");
-      }
+      deletePersonaMutation.mutate(id);
   };
 
   const resetForm = () => {
       setShowForm(false);
       setEditingId(null);
       setFormData({ name: '', role: 'NPC', description: '', voice_description: '', player_name: '' });
-  }
+  };
 
   // Merge Logic
   const handleMergeClick = (persona: Persona) => {
@@ -120,24 +155,7 @@ export default function PersonaList() {
       if (!window.confirm(`Merge "${mergeSource.name}" into "${targetPersona.name}"? This cannot be undone.`)) {
           return;
       }
-      
-      try {
-          const res = await axios.post('/api/personas/merge', {
-              target_persona_id: targetPersona.id,
-              source_persona_id: mergeSource.id
-          });
-          
-          // Update local state: Remove source, update target
-          setPersonas(personas.filter(p => p.id !== mergeSource.id).map(p => p.id === targetPersona.id ? res.data : p));
-          
-          setMergeSource(null);
-          setMergeMode(false);
-          alert("Merge successful");
-          
-      } catch (err) {
-          console.error(err);
-          alert("Failed to merge personas. ensure both exist.");
-      }
+      mergePersonaMutation.mutate({ targetId: targetPersona.id, sourceId: mergeSource.id });
   };
 
   const filteredPersonas = personas.filter(p => 
@@ -257,17 +275,17 @@ export default function PersonaList() {
                 <div className="flex justify-end gap-2 mt-4">
                     <button 
                         type="submit" 
-                        disabled={creating}
+                        disabled={createPersonaMutation.isPending || updatePersonaMutation.isPending}
                         className="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg font-bold"
                     >
-                        {creating ? 'Saving...' : (editingId ? 'Update Persona' : 'Save Persona')}
+                        {createPersonaMutation.isPending || updatePersonaMutation.isPending ? 'Saving...' : (editingId ? 'Update Persona' : 'Save Persona')}
                     </button>
                 </div>
             </form>
           </div>
       )}
 
-      {loading ? (
+      {isLoading ? (
         <div className="flex justify-center p-12">
           <Loader2 className="animate-spin text-purple-500" size={40} />
         </div>
@@ -467,17 +485,27 @@ function PersonaCard({ persona, onEdit, onDelete, mergeMode, isMergeSource, onMe
 }
 
 function FormattedQuoteLine({ line }: { line: string }) {
+    // Try to extract session header: [Session Name] Content
     const match = line.match(/^\[(.*?)\] (.*)$/);
-    if (!match) return <p className="mb-1">"{line.replace(/^\[.*?\] /, '')}"</p>;
+    
+    let title = "";
+    let content = line;
 
-    const title = match[1];
-    let content = match[2];
+    if (match) {
+        title = match[1];
+        content = match[2];
+    } else {
+        // If no session match, maybe the whole line is the content (legacy data might lack header)
+        // Or check if the line itself looks like a header-less list
+        content = line;
+    }
+
     let items = [content];
 
     // Attempt to parse python-style list string: "['Item 1', 'Item 2']"
-    if (content.startsWith('[') && content.endsWith(']')) {
-        const inner = content.slice(1, -1);
-        const listMatch = [...inner.matchAll(/(["'])(?:(?=(\\?))\2.)*?\1/g)];
+    if (content.trim().startsWith('[') && content.trim().endsWith(']')) {
+        const inner = content.trim().slice(1, -1);
+        const listMatch = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
         if (listMatch.length > 0) {
             items = listMatch.map(m => {
                  return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
@@ -487,11 +515,11 @@ function FormattedQuoteLine({ line }: { line: string }) {
 
     return (
         <div className="mb-3 last:mb-0">
-             <div className="font-bold text-slate-600 opacity-70 mb-1 not-italic text-[10px] uppercase tracking-wide">{title}</div>
+             {title && <div className="font-bold text-slate-600 opacity-70 mb-1 not-italic text-[10px] uppercase tracking-wide">{title}</div>}
              <div className="space-y-1">
                  {items.map((item, idx) => (
                      <p key={idx} className="pl-1 text-slate-300">
-                        &quot;{item}&quot;
+                        &quot;{item.replace(/^\[.*?\] /, '')}&quot;
                      </p>
                  ))}
              </div>
@@ -501,17 +529,22 @@ function FormattedQuoteLine({ line }: { line: string }) {
 
 function FormattedPointLine({ line, titleColor }: { line: string; titleColor: string }) {
     const match = line.match(/^\[(.*?)\] (.*)$/);
-    if (!match) return <p className="mb-1">{line}</p>;
+    
+    let title = "";
+    let content = line;
 
-    const title = match[1];
-    let content = match[2];
+    if (match) {
+        title = match[1];
+        content = match[2];
+    }
+
     let items = [content];
 
     // Attempt to parse python-style list string: "['Item 1', 'Item 2']"
-    if (content.startsWith('[') && content.endsWith(']')) {
-        const inner = content.slice(1, -1);
+    if (content.trim().startsWith('[') && content.trim().endsWith(']')) {
+        const inner = content.trim().slice(1, -1);
         // Match quoted strings. Captures single or double quoted strings.
-        const listMatch = [...inner.matchAll(/(["'])(?:(?=(\\?))\2.)*?\1/g)];
+        const listMatch = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
         if (listMatch.length > 0) {
             items = listMatch.map(m => {
                  // Remove surrounding quotes and unescape
@@ -522,7 +555,7 @@ function FormattedPointLine({ line, titleColor }: { line: string; titleColor: st
 
     return (
         <div className="mb-3 last:mb-0">
-             <div className={`font-bold ${titleColor} opacity-90 mb-1 not-italic`}>{title}</div>
+             {title && <div className={`font-bold ${titleColor} opacity-90 mb-1 not-italic`}>{title}</div>}
              {items.length === 1 ? (
                  <p className="pl-1">{items[0]}</p>
              ) : (

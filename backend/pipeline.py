@@ -7,7 +7,7 @@ from google import genai
 from google.genai import types
 from google.genai.errors import ClientError
 from sqlmodel import Session, select, col
-from .models import Session as DBSessionEntry, Transcript, Persona, Moment
+from .models import Session as DBSessionEntry, Transcript, Persona, Moment, Highlight, Quote, Campaign
 import re
 import difflib
 from dotenv import load_dotenv
@@ -63,7 +63,8 @@ Ensure you capture events, quotes, and highlights from the ENTIRE recording.
 There may be multiple files to process, and you should process them in order.
 For the audio, try to discern the events that are occuring in the game vs events that are occuring in the real world (outside the game).
 For the audio, there may also be superfluous noise and/or events in the real world (outside the game) that can and should be ignored.
-Do not be concise. Provide as much detail as possible. I expect a paragraph for each event at a minimum.
+Do not be concise. Provide as much detail as possible.
+A good summary WILL have at least 1000 words and 5 paragraphs.
 
 OUTPUT FORMAT (JSON):
 {
@@ -140,7 +141,35 @@ def clean_and_parse_json(text):
     # Matches backslash not followed by valid escape chars
     text = re.sub(r'\\(?![/bfnrtu"\\\\])', r'\\\\', text)
     
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        # Attempt to recover JSON
+        # 1. Check if it's wrapped in a list and we want a dict (or just extract the first object)
+        # Find first {
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1:
+             try:
+                 candidate = text[start:end+1]
+                 return json.loads(candidate)
+             except:
+                 pass
+        
+        # 2. Check if it's a list that needs unwrapping
+        start_list = text.find('[')
+        end_list = text.rfind(']')
+        if start_list != -1 and end_list != -1:
+            try:
+                candidate = text[start_list:end_list+1]
+                data = json.loads(candidate)
+                if isinstance(data, list) and len(data) > 0:
+                    return data[0] # Return first item
+                return data
+            except:
+                pass
+                
+        raise
 
 def process_session_pipeline(session_id: int, db_engine):
     """
@@ -236,7 +265,6 @@ def process_session_pipeline(session_id: int, db_engine):
              
             # ... continue pipeline ...
 
-            
             # 2. Wait for processing
             wait_for_files_active(gemini_files)
             
@@ -285,7 +313,6 @@ CRITICAL INSTRUCTIONS FOR PERSONAS:
             
             # List of models to try in order of preference
             models_to_try = [
-                "gemini-2.0-flash", # Try Flash first (fastest, cheapest)
                 "gemini-flash-latest", # Latest Flash
                 "gemini-3-flash-preview", # New Flash
                 "gemini-3-pro-preview",   # High Context (2M)
@@ -328,9 +355,32 @@ CRITICAL INSTRUCTIONS FOR PERSONAS:
                                 response_mime_type="application/json"
                             )
                         )
-                        print(f"[Session {session_id}] Success with model: {model_name}")
-                        break # Exit retry loop on success (will also break outer loop below)
                         
+                        # Validate JSON immediately
+                        try:
+                            # Pre-validate structure
+                            data = clean_and_parse_json(response.text)
+                            if isinstance(data, list):
+                                # Unwrap list if needed (though clean_and_parse might have done it, 
+                                # if it returned a list, we accept it if it matches our schema or just take first)
+                                if len(data) > 0 and isinstance(data[0], dict):
+                                    data = data[0]
+                                else:
+                                    raise ValueError("Returned JSON is a list but does not contain a dictionary.")
+
+                            if not isinstance(data, dict):
+                                raise ValueError(f"Expected dictionary, got {type(data)}")
+                            
+                            print(f"[Session {session_id}] Success with model: {model_name}")
+                            break # Exit retry loop on success
+                        except Exception as json_e:
+                            print(f"[Session {session_id}] JSON Parse/Validation failed for {model_name}: {json_e}")
+                            print(f"Raw text chunk: {response.text[:200]}...")
+                            if attempt < max_retries:
+                                continue # Retry
+                            else:
+                                raise json_e # Will be caught by outer except, effectively moving to next model
+
                     except Exception as e:
                         # Handle specific GenAI errors
                         if isinstance(e, ClientError):
@@ -353,27 +403,21 @@ CRITICAL INSTRUCTIONS FOR PERSONAS:
                                 break # Break inner loop, try next model
                         
                         # For other exceptions or unhandled codes
-                        print(f"[Session {session_id}] Unexpected error with {model_name}: {e}")
-                        # If this was the last model AND last attempt, re-raise? 
-                        # Actually if we are here, we probably want to try next model unless it's a critical error not related to inference
-                        break # Break inner loop, try next model
+                        print(f"[Session {session_id}] Error with {model_name}: {e}") 
+                        # Try next model
+                        break 
 
-                if response:
-                    break # Break outer loop if we got a response
+                if response and 'data' in locals() and data:
+                    break # Break outer loop if we got a response AND valid data
             
-            if not response:
-                raise Exception(f"Failed to generate content with all attempted models: {models_to_try}")
+            if not response or 'data' not in locals() or not data:
+                raise Exception(f"Failed to generate valid content with all attempted models: {models_to_try}")
             
-            print("Received response from Gemini.")
+            print("Received valid response from Gemini.")
             
-            # 4. Parse JSON
-            try:
-                data = clean_and_parse_json(response.text)
-            except json.JSONDecodeError as e:
-                print(f"JSON Decode Error: {e}")
-                print(f"Raw text was: {response.text[:500]}...") # Print start of text
-                # Try one more aggressive fix? Handled by function?
-                raise e
+            # 5. Save to DB
+            # data is already parsed
+
             
             # 5. Save to DB
             save_content_to_db(session_id, data, db)
@@ -464,15 +508,6 @@ def save_content_to_db(session_id: int, data: dict, db):
 
         voice_desc = p_data.get("voice_description")
         
-        # Helper to append new content with a newline
-        def append_to_field(existing_text, new_text):
-            if not new_text or new_text == "None": return existing_text
-            timestamp_header = f"[{session_entry.name}]" 
-            entry = f"{timestamp_header} {new_text}"
-            if existing_text:
-                return f"{existing_text}\n{entry}"
-            return entry
-
         if existing_persona:
             if voice_desc:
                 existing_persona.voice_description = voice_desc
@@ -481,36 +516,77 @@ def save_content_to_db(session_id: int, data: dict, db):
             if p_data.get("player_name") and not existing_persona.player_name:
                 existing_persona.player_name = p_data.get("player_name")
             
-            existing_persona.highlights = append_to_field(existing_persona.highlights, p_data.get("highlights"))
-            existing_persona.low_points = append_to_field(existing_persona.low_points, p_data.get("low_points"))
-            existing_persona.memorable_quotes = append_to_field(existing_persona.memorable_quotes, p_data.get("memorable_quotes"))
-            
             db.add(existing_persona)
+            current_persona_id = existing_persona.id
         else:
-            # For new persona, format the initial entries
-            initial_hl = p_data.get("highlights")
-            initial_lp = p_data.get("low_points")
-            initial_mq = p_data.get("memorable_quotes")
-            
-            # Since create is just one entry, just format it directly if it exists
-            hl_val = f"[{session_entry.name}] {initial_hl}" if initial_hl else None
-            lp_val = f"[{session_entry.name}] {initial_lp}" if initial_lp else None
-            mq_val = f"[{session_entry.name}] {initial_mq}" if initial_mq else None
-
-            new_persona = Persona(
+             new_persona = Persona(
                 name=p_data["name"],
                 role=p_data["role"],
                 description=p_data["description"],
                 voice_description=voice_desc,
                 session_id=session_id,
                 campaign_id=campaign_id,
-                highlights=hl_val,
-                low_points=lp_val,
-                memorable_quotes=mq_val,
                 player_name=p_data.get("player_name")
             )
+             db.add(new_persona)
+             db.commit() # Need ID for foreign keys
+             db.refresh(new_persona)
+             current_persona_id = new_persona.id
 
-            db.add(new_persona)
+        # Save Highlights (List of objects)
+        highlights_data = p_data.get("highlights", [])
+        if isinstance(highlights_data, list):
+            for item in highlights_data:
+                # Expecting string usually, but could be dict from AI
+                content = str(item)
+                if isinstance(item, dict) and "text" in item:
+                     content = item["text"]
+                
+                new_hl = Highlight(
+                    text=content,
+                    type="high",
+                    session_id=session_id,
+                    persona_id=current_persona_id,
+                    campaign_id=campaign_id
+                )
+                db.add(new_hl)
+
+        # Save Low Points
+        low_points_data = p_data.get("low_points", [])
+        if isinstance(low_points_data, list):
+             for item in low_points_data:
+                content = str(item)
+                new_lp = Highlight(
+                    text=content,
+                    type="low",
+                    session_id=session_id,
+                    persona_id=current_persona_id,
+                    campaign_id=campaign_id
+                )
+                db.add(new_lp)
+        
+        # Save Quotes
+        quotes_data = p_data.get("memorable_quotes", [])
+        if isinstance(quotes_data, list):
+             for item in quotes_data:
+                content = ""
+                speaker = None
+                
+                if isinstance(item, dict):
+                    content = item.get("quote", "")
+                    speaker = item.get("speaker")
+                elif isinstance(item, str):
+                    content = item
+                
+                if content:
+                    new_qt = Quote(
+                        text=content,
+                        speaker_name=speaker,
+                        session_id=session_id,
+                        persona_id=current_persona_id,
+                        campaign_id=campaign_id
+                    )
+                    db.add(new_qt)
             
     # Moments
     for m_data in data.get("moments", []):
@@ -565,8 +641,27 @@ def process_text_session_pipeline(session_id: int, db_engine):
                             response_mime_type="application/json"
                         )
                     )
-                    print(f"Success with model: {model_name}")
-                    break
+                    
+                    # Validate JSON
+                    try:
+                        result_json = clean_and_parse_json(response.text)
+                        if isinstance(result_json, list):
+                             if len(result_json) > 0 and isinstance(result_json[0], dict):
+                                 result_json = result_json[0]
+                             else:
+                                 raise ValueError("Returned JSON is a list but does not contain a dictionary.")
+                        
+                        if not isinstance(result_json, dict):
+                            raise ValueError(f"Expected dictionary, got {type(result_json)}")
+                        
+                        print(f"Success with model: {model_name}")
+                        break
+                    except Exception as json_e:
+                        print(f"JSON Parse/Validation failed for {model_name}: {json_e}")
+                        # Next model
+                        response = None
+                        continue
+
                 except ClientError as e:
                     if e.code == 429:
                         print(f"Rate limited on {model_name}. Trying next model...")
@@ -576,16 +671,18 @@ def process_text_session_pipeline(session_id: int, db_engine):
                          print(f"Model {model_name} not found. Skipping.")
                          continue
                     else:
-                        raise e
+                        print(f"Error with {model_name}: {e}")
+                        continue
                         
-            if not response:
+            if not response or 'result_json' not in locals() or not result_json:
                  raise Exception(f"Failed to generate content with all attempted models: {models_to_try}")
             
-            try:
-                result_json = clean_and_parse_json(response.text)
-            except json.JSONDecodeError as e:
-                print(f"JSON Decode Error: {e}") 
-                raise e
+            # Already parsed
+            # try:
+            #     result_json = clean_and_parse_json(response.text)
+            # except json.JSONDecodeError as e:
+            #     print(f"JSON Decode Error: {e}") 
+            #     raise e
             save_content_to_db(session_id, result_json, db)
             
             # Helper to ensure data is string
@@ -676,17 +773,20 @@ INSTRUCTIONS:
 1.  **Narrative Arc**: Identify the main plot threads and how they have developed across sessions.
 2.  **Character Growth**: Mention key character moments or arcs if they are prominent.
 3.  **Tone**: Keep the tone epic and engaging, suitable for a "Previously on..." recap.
+3.  **Recap**: Ensure to name all the Player Characters (PCs) and their roles.
 4.  **Structure**:
-    -   **The Story So Far**: A cohesive narrative of the events.
+    -   **The Story So Far**: A cohesive narrative of every event encountered so far. Make this lengthy and detailed with multiple paragraphs.
     -   **Key Events**: Important events or milestones.
-    -   **Key Themes**: Recurring themes or ongoing conflicts.
-    -   **MVP (Most Valuable Persona)**: Subjectively pick a character who has been central to the plot so far based on the events.
+    -   **Ongoing Conflicts**: Ongoing conflicts or themes.
+    -   **PC Highlights**: Best moment of the campaign for each Player Character (PC).
+    -   **MVP (Most Valuable Persona)**: Subjectively pick a character who has been central to the plot so far based on the events and quickly justify why.
 
 OUTPUT FORMAT (JSON):
 {{
     "summary": "The narrative summary...",
     "events": ["Event 1", "Event 2"]
-    "themes": ["Theme 1", "Theme 2"],
+    "conflicts": ["Conflict 1", "Conflict 2"],
+    "highlights": ["Highlight 1", "Highlight 2"],
     "mvp": "Most Valuable Persona"
 }}
 """
@@ -717,8 +817,11 @@ OUTPUT FORMAT (JSON):
             if data.get("events"):
                 summary_text += "\n\n**Key Events:**\n" + "\n".join([f"- {e}" for e in data["events"]])
             
-            if data.get("themes"):
-                summary_text += "\n\n**Key Themes:**\n" + "\n".join([f"- {t}" for t in data["themes"]])
+            if data.get("conflicts"):
+                summary_text += "\n\n**Ongoing Conflicts:**\n" + "\n".join([f"- {c}" for c in data["conflicts"]])
+            
+            if data.get("highlights"):
+                summary_text += "\n\n**PC Highlights:**\n" + "\n".join([f"- {h}" for h in data["highlights"]])
             
             if data.get("mvp"):
                 summary_text += "\n\n**MVP:**\n" + data["mvp"]

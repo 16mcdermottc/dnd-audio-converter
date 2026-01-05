@@ -1,47 +1,53 @@
-import React, { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { Book, Loader2, Map, Plus, Trash2 } from 'lucide-react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Book, Plus, Loader2, Map, Trash2 } from 'lucide-react';
 import { Campaign } from '../types';
 
 export default function CampaignList() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState('');
-  const [creating, setCreating] = useState(false);
 
-  useEffect(() => {
-    fetchCampaigns();
-  }, []);
-
-  const fetchCampaigns = async () => {
-    try {
+  const { data: campaigns = [], isLoading: loading } = useQuery<Campaign[]>({
+    queryKey: ['campaigns'],
+    queryFn: async () => {
       const res = await axios.get('/api/campaigns/');
-      setCampaigns(res.data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
+      return res.data;
     }
-  };
+  });
+
+  const createCampaignMutation = useMutation({
+    mutationFn: async (name: string) => {
+      return axios.post('/api/campaigns/', {
+        name,
+        description: "A new adventure begins..."
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+      setShowForm(false);
+      setNewCampaignName('');
+    }
+  });
+
+  const deleteCampaignMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return axios.delete(`/api/campaigns/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['campaigns'] });
+    }
+  });
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreating(true);
     try {
-      const res = await axios.post('/api/campaigns/', {
-        name: newCampaignName,
-        description: "A new adventure begins..."
-      });
-      setCampaigns([...campaigns, res.data]);
-      setShowForm(false);
-      setNewCampaignName('');
+      await createCampaignMutation.mutateAsync(newCampaignName);
     } catch (err) {
       console.error(err);
       alert("Failed to create campaign");
-    } finally {
-      setCreating(false);
     }
   };
 
@@ -49,8 +55,7 @@ export default function CampaignList() {
     if (!window.confirm("Are you sure you want to delete this campaign? This will delete all associated sessions and personas.")) return;
     
     try {
-        await axios.delete(`/api/campaigns/${id}`);
-        setCampaigns(campaigns.filter(c => c.id !== id));
+        await deleteCampaignMutation.mutateAsync(id);
     } catch (err) {
         console.error(err);
         alert("Failed to delete campaign");
@@ -146,10 +151,10 @@ export default function CampaignList() {
                         </button>
                         <button 
                             type="submit" 
-                            disabled={creating}
+                            disabled={createCampaignMutation.isPending}
                             className="bg-purple-600 hover:bg-purple-500 text-white font-bold px-6 py-2 rounded-lg"
                         >
-                            {creating ? 'Creating...' : 'Create Campaign'}
+                            {createCampaignMutation.isPending ? 'Creating...' : 'Create Campaign'}
                         </button>
                     </div>
                 </form>
