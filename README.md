@@ -46,7 +46,7 @@ A powerful tool for Dungeon Masters and players to archive, analyze, and manage 
 
 ### 1. Clone the Repository
 ```bash
-git clone <repository-url>
+git clone git@github.com:16mcdermottc/dnd-audio-converter.git
 cd dnd-audio-converter
 ```
 
