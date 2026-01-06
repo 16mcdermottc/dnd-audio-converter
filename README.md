@@ -29,7 +29,7 @@ A powerful tool for Dungeon Masters and players to archive, analyze, and manage 
 ## Tech Stack
 
 - **Frontend**: React, Vite, TailwindCSS, Lucide Icons, React Markdown.
-- **Backend**: FastAPI, SQLModel (SQLite), Uvicorn, Python-Multipart, Aiofiles.
+- **Backend**: FastAPI, GraphQL, Uvicorn, Python-Multipart, Aiofiles.
 - **AI SDK**: `google-genai` (Official Google GenAI SDK).
 
 ---
