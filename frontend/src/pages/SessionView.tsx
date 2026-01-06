@@ -3,6 +3,7 @@ import axios from 'axios';
 import { ArrowLeft, Loader2, Quote, TrendingDown, TrendingUp } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { Session } from '../types';
+import { parseListString } from '../utils/stringUtils';
 
 export default function SessionView() {
   const { id } = useParams();
@@ -19,41 +20,8 @@ export default function SessionView() {
 
   if (isLoading) return <div className="p-12 flex justify-center"><Loader2 className="animate-spin text-purple-500" /></div>;
   
-  // @ts-ignore
+
   if (error || !session) return <div className="p-12 text-center text-red-400">Session not found</div>;
-
-  const parseListString = (content: string): string[] => {
-    if (!content) return [];
-    const trimmed = content.trim();
-
-    // Check for Python-style list string: ['Item 1', 'Item 2']
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const inner = trimmed.substring(1, trimmed.length - 1);
-        // Robust regex to match single or double quoted strings, handling escaped quotes
-        const matches = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
-        
-        if (matches.length > 0) {
-            return matches.map(m => {
-                // Remove surrounding quotes and unescape
-                return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
-            });
-        }
-        
-        // Fallback for simple JSON if regex fails but it looks like a list
-        try {
-            return JSON.parse(trimmed);
-        } catch (e) {
-            // Ignore
-        }
-      } catch (e) {
-        console.warn("Failed to parse list string", e);
-      }
-    }
-    
-    // Fallback to splitting by newline if it's not a detected list format
-    return content.split('\n');
-  };
 
   return (
     <div className="p-8 max-w-5xl mx-auto">

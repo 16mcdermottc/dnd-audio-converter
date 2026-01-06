@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { ArrowLeft, ChevronDown, ChevronRight, FileText, Mic, Shield, Sparkles, Trash2, Upload, User } from 'lucide-react';
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import EditItemModal from '../components/EditItemModal';
@@ -71,22 +71,19 @@ export default function CampaignView() {
 
   // Handle errors
   if (campaignError) {
-      // @ts-ignore
+      // @ts-expect-error - Response property exists on Axios error
       if (campaignError.response?.status === 404) {
           navigate('/');
       }
   }
 
   // Mutations
-  const generateSummaryMutation = useMutation({
+  const { mutate: generateSummary, isPending: isGeneratingSummary } = useMutation({
     mutationFn: async () => {
       return axios.post(`/api/campaigns/${campaignId}/generate_summary`);
     },
     onSuccess: () => {
        alert("Scribes are chronicling the saga... check back in a few moments!");
-       // Invalidate immediately, but maybe wait a bit? Original code had a timeout. 
-       // We'll just invalidate and let the user click regenerate if they want, or we could poll.
-       // For now, standard invalidation.
        setTimeout(() => {
          queryClient.invalidateQueries({ queryKey: ['campaign', campaignId] });
        }, 2000);
@@ -97,7 +94,7 @@ export default function CampaignView() {
     }
   });
 
-  const deleteSessionMutation = useMutation({
+  const { mutate: deleteSession } = useMutation({
     mutationFn: async (sessionId: number) => {
       return axios.delete(`/api/sessions/${sessionId}`);
     },
@@ -109,13 +106,13 @@ export default function CampaignView() {
     }
   });
 
-  const updateItemMutation = useMutation({
+  const { mutate: updateItem } = useMutation({
     mutationFn: async (item: Highlight | QuoteType) => {
         const isQuote = 'speaker_name' in item;
         const endpoint = isQuote ? `/api/quotes/${item.id}` : `/api/highlights/${item.id}`;
         return axios.put(endpoint, item);
     },
-    onSuccess: (data, variables) => {
+    onSuccess: () => {
         // Invalidate the specific persona definition
         queryClient.invalidateQueries({ queryKey: ['persona', selectedPersonaId] });
     },
@@ -143,7 +140,7 @@ export default function CampaignView() {
         }
         return { previousPersona };
     },
-    onError: (err, newItem, context) => {
+    onError: (_err, _newItem, context) => {
         if (context?.previousPersona) {
             queryClient.setQueryData(['persona', selectedPersonaId], context.previousPersona);
         }
@@ -151,7 +148,7 @@ export default function CampaignView() {
     }
   });
 
-  const deleteItemMutation = useMutation({
+  const { mutate: deleteItem } = useMutation({
     mutationFn: async (item: Highlight | QuoteType) => {
         const isQuote = 'speaker_name' in item;
         const endpoint = isQuote ? `/api/quotes/${item.id}` : `/api/highlights/${item.id}`;
@@ -172,7 +169,7 @@ export default function CampaignView() {
                          ...old, 
                          quotes_list: old.quotes_list?.filter(q => q.id !== item.id) 
                      };
-                } else {
+                } else { 
                      return { 
                          ...old, 
                          highlights_list: old.highlights_list?.filter(h => h.id !== item.id) 
@@ -182,66 +179,40 @@ export default function CampaignView() {
         }
         return { previousPersona };
     },
-    onError: (err, item, context) => {
+    onError: (_err, _item, context) => {
         if (context?.previousPersona) {
             queryClient.setQueryData(['persona', selectedPersonaId], context.previousPersona);
         }
-        alert("Failed to delete item");
+        alert("Failed to save changes");
     }
   });
 
   const handleDeleteSession = async (sessionId: number, e: React.MouseEvent) => {
       e.stopPropagation();
       if(!window.confirm("Delete this session? This cannot be undone.")) return;
-      deleteSessionMutation.mutate(sessionId);
+      deleteSession(sessionId);
   };
 
-  const handleEditItem = (item: Highlight | QuoteType) => {
+  const handleEditItem = useCallback((item: Highlight | QuoteType) => {
       setEditingItem(item);
-  };
+  }, []);
 
-  const handleSaveItem = async (updatedItem: Highlight | QuoteType) => {
-      updateItemMutation.mutate(updatedItem);
-  };
+  const handleSaveItem = useCallback(async (updatedItem: Highlight | QuoteType) => {
+      updateItem(updatedItem);
+  }, [updateItem]);
 
-  const handleDeleteItem = async (item: Highlight | QuoteType) => {
+  const handleDeleteItem = useCallback(async (item: Highlight | QuoteType) => {
       if(!window.confirm("Delete this item?")) return;
-      deleteItemMutation.mutate(item);
-  };
+      deleteItem(item);
+  }, [deleteItem]);
 
-  // Helper (same as before)
-  const parseListString = (content: string): string[] => {
-    if (!content) return [];
-    const trimmed = content.trim();
+  const handleClosePersonaModal = useCallback(() => {
+    setSelectedPersonaId(null);
+  }, []);
 
-    // Check for Python-style list string: ['Item 1', 'Item 2']
-    if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-      try {
-        const inner = trimmed.substring(1, trimmed.length - 1);
-        // Robust regex to match single or double quoted strings, handling escaped quotes
-        const matches = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
-        
-        if (matches.length > 0) {
-            return matches.map(m => {
-                // Remove surrounding quotes and unescape
-                return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
-            });
-        }
-        
-        // Fallback for simple JSON if regex fails but it looks like a list
-        try {
-            return JSON.parse(trimmed);
-        } catch (e) {
-            // Ignore
-        }
-      } catch (e) {
-        console.warn("Failed to parse list string", e);
-      }
-    }
-    
-    // Fallback to splitting by newline if it's not a detected list format
-    return content.split('\n');
-  };
+  const handleCloseEditModal = useCallback(() => {
+    setEditingItem(null);
+  }, []);
 
   if (campaignLoading) return <div className="p-12 text-center text-slate-500">Loading Realm...</div>;
   if (!campaign) return null;
@@ -281,13 +252,13 @@ export default function CampaignView() {
                 <button 
                     onClick={(e) => {
                         e.stopPropagation();
-                        if (generateSummaryMutation.isPending) return;
-                        generateSummaryMutation.mutate();
+                        if (isGeneratingSummary) return;
+                        generateSummary();
                     }}
-                    disabled={generateSummaryMutation.isPending}
+                    disabled={isGeneratingSummary}
                     className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
                 >
-                    {generateSummaryMutation.isPending ? <Mic className="animate-pulse" size={14}/> : <Sparkles size={14} />}
+                    {isGeneratingSummary ? <Mic className="animate-pulse" size={14}/> : <Sparkles size={14} />}
                     {campaign.summary ? "Regenerate Summary" : "Generate Summary"}
                 </button>
             </div>
@@ -441,7 +412,7 @@ export default function CampaignView() {
         {selectedPersona && (
             <PersonaDetailsModal 
                 persona={selectedPersona}
-                onClose={() => setSelectedPersonaId(null)}
+                onClose={handleClosePersonaModal}
                 onEditItem={handleEditItem}
                 onDeleteItem={handleDeleteItem}
             />
@@ -511,7 +482,7 @@ export default function CampaignView() {
         </section>
         <EditItemModal 
             isOpen={!!editingItem}
-            onClose={() => setEditingItem(null)}
+            onClose={handleCloseEditModal}
             item={editingItem}
             personas={personas}
             onSave={handleSaveItem}

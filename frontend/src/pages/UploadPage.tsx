@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
 import { FileAudio, FileText, Loader2, UploadCloud } from 'lucide-react';
 import React, { useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -48,7 +48,7 @@ export default function UploadPage() {
         queryClient.invalidateQueries({ queryKey: ['campaign', parseInt(campaignId || '0')] });
         navigate(`/campaigns/${campaignId}`);
     },
-    onError: (err: any) => {
+    onError: (err: AxiosError<{detail: string}>) => {
         console.error(err);
         alert(err.response?.data?.detail || "Upload failed");
     }
@@ -69,7 +69,7 @@ export default function UploadPage() {
         queryClient.invalidateQueries({ queryKey: ['campaign', parseInt(campaignId || '0')] });
         navigate(`/campaigns/${campaignId}`);
     },
-    onError: (err: any) => {
+    onError: (err: AxiosError<{detail: string}>) => {
         console.error(err);
         alert(err.response?.data?.detail || "Import failed");
     }

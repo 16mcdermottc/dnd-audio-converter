@@ -1,7 +1,8 @@
-import React from 'react';
+import { memo } from 'react';
 import { X, TrendingUp, TrendingDown, Quote, Pencil, Trash2 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { Persona, Highlight, Quote as QuoteType } from '../types';
+import { parseListString } from '../utils/stringUtils';
 
 interface PersonaDetailsModalProps {
     persona: Persona;
@@ -10,44 +11,10 @@ interface PersonaDetailsModalProps {
     onDeleteItem: (item: Highlight | QuoteType) => void;
 }
 
-export default function PersonaDetailsModal({ persona, onClose, onEditItem, onDeleteItem }: PersonaDetailsModalProps) {
-    
-    // Helper helper for list parsing (duplicated for now to avoid large refactor, or we can move to utils)
-    // Ideally should be imported. For speed, I'll include it here or let's create a utils file next.
-    const parseListString = (content: string): string[] => {
-        if (!content) return [];
-        const trimmed = content.trim();
-    
-        // Check for Python-style list string: ['Item 1', 'Item 2']
-        if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-          try {
-            const inner = trimmed.substring(1, trimmed.length - 1);
-            // Robust regex to match single or double quoted strings, handling escaped quotes
-            const matches = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
-            
-            if (matches.length > 0) {
-                return matches.map(m => {
-                    // Remove surrounding quotes and unescape
-                    return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
-                });
-            }
-            
-            try {
-                return JSON.parse(trimmed);
-            } catch (e) {
-                // Ignore
-            }
-          } catch (e) {
-            console.warn("Failed to parse list string", e);
-          }
-        }
-        
-        return content.split('\n');
-      };
-
+const PersonaDetailsModal = memo(function PersonaDetailsModal({ persona, onClose, onEditItem, onDeleteItem }: PersonaDetailsModalProps) {
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-slate-900 w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-slate-900 w-full max-w-6xl max-h-[90vh] overflow-y-auto rounded-2xl border border-slate-700 shadow-2xl animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 <div className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur border-b border-slate-700 p-6 flex justify-between items-start">
                         <div>
                         <div className="flex items-center gap-3 mb-2">
@@ -158,4 +125,6 @@ export default function PersonaDetailsModal({ persona, onClose, onEditItem, onDe
             </div>
         </div>
     );
-}
+});
+
+export default PersonaDetailsModal;
