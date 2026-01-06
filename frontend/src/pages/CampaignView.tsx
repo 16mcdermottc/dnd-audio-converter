@@ -6,7 +6,9 @@ import ReactMarkdown from 'react-markdown';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import EditItemModal from '../components/EditItemModal';
 import PersonaDetailsModal from '../components/PersonaDetailsModal';
-import { Campaign, Highlight, Persona, Quote as QuoteType, Session } from '../types';
+import { Campaign, Highlight, Persona, Quote as QuoteType } from '../types';
+import { request } from '../utils/graphql';
+import { GET_CAMPAIGN_DASHBOARD, GET_PERSONA_DETAILS } from '../graphql/queries';
 
 export default function CampaignView() {
   const { id } = useParams();
@@ -31,43 +33,28 @@ export default function CampaignView() {
   };
 
   // Queries
-  const { data: campaign, isLoading: campaignLoading, error: campaignError } = useQuery<Campaign>({
-    queryKey: ['campaign', campaignId],
+  // GraphQL Query for Dashboard
+  const { data: dashboardData, isLoading: campaignLoading, error: campaignError } = useQuery<{ campaign: Campaign }>({
+    queryKey: ['campaign-dashboard', campaignId],
     queryFn: async () => {
-      const res = await axios.get(`/api/campaigns/${campaignId}`);
-      return res.data;
-    },
-    enabled: !!campaignId,
-    retry: 1
-  });
-
-  const { data: sessions = [] } = useQuery<Session[]>({
-    queryKey: ['sessions', campaignId],
-    queryFn: async () => {
-      const res = await axios.get(`/api/sessions/?campaign_id=${campaignId}`);
-      return res.data;
+      return request<{ campaign: Campaign }>(GET_CAMPAIGN_DASHBOARD, { id: campaignId });
     },
     enabled: !!campaignId
   });
 
-  const { data: personas = [] } = useQuery<Persona[]>({
-    queryKey: ['personas', campaignId],
-    queryFn: async () => {
-      const res = await axios.get(`/api/personas/?campaign_id=${campaignId}`);
-      return res.data;
-    },
-    enabled: !!campaignId
-  });
+  const campaign = dashboardData?.campaign;
+  // Ensure we have defaults if data is loading/missing to prevent crashes
+  const sessions = campaign?.sessions || [];
+  const personas = campaign?.personas || [];
 
-  const { data: selectedPersona } = useQuery<Persona>({
+  const { data: selectedPersonaData } = useQuery<{ persona: Persona }>({
     queryKey: ['persona', selectedPersonaId],
     queryFn: async () => {
-      const res = await axios.get(`/api/personas/${selectedPersonaId}`);
-      return res.data;
+      return request<{ persona: Persona }>(GET_PERSONA_DETAILS, { id: selectedPersonaId });
     },
-    enabled: !!selectedPersonaId,
-    initialData: () => personas.find(p => p.id === selectedPersonaId)
+    enabled: !!selectedPersonaId
   });
+  const selectedPersona = selectedPersonaData?.persona;
 
   // Handle errors
   if (campaignError) {

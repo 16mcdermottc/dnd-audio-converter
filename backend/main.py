@@ -32,8 +32,24 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# GraphQL Setup
+# GraphQL Setup
+import strawberry
+from strawberry.fastapi import GraphQLRouter
+from .schema import schema
+
+async def get_context(db: DBSession = Depends(get_session)):
+    return {"db": db}
+
+def get_graphql_context(context=Depends(get_session)):
+    return {"db": context}
+
+graphql_app = GraphQLRouter(schema, context_getter=get_graphql_context)
+app.include_router(graphql_app, prefix="/graphql")
 
 @app.on_event("startup")
 def on_startup():
