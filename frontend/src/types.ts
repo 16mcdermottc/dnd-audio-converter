@@ -4,6 +4,8 @@ export interface Campaign {
   description: string;
   created_at: string;
   summary?: string;
+  sessions?: Session[];
+  personas?: Persona[];
 }
 
 export interface Session {
@@ -27,9 +29,10 @@ export interface Persona {
   voice_description?: string;
   campaign_id: number;
   session_id?: number;
-  highlights?: string;
+  highlights?: string | Highlight[];
   low_points?: string;
   memorable_quotes?: string;
+  quotes?: Quote[];
   summary?: string;
   player_name?: string;
   highlights_list?: Highlight[];

@@ -1,8 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import axios from 'axios';
 import { Loader2, MessageSquare, Quote, Search, Shield, User } from 'lucide-react';
 import { useState } from 'react';
+import { useParams } from 'react-router-dom';
 import { Persona } from '../types';
+import { request } from '../utils/graphql';
+import { GET_CAMPAIGN_PERSONAS } from '../graphql/queries';
 
 interface QuoteItem {
     id: string;
@@ -12,57 +14,41 @@ interface QuoteItem {
 }
 
 export default function QuoteList() {
+    const { id } = useParams();
+    const campaignId = id ? parseInt(id) : null;
     const [filter, setFilter] = useState('');
 
     const { data: personas = [], isLoading } = useQuery<Persona[]>({
-        queryKey: ['personas'],
+        queryKey: ['personas', campaignId],
         queryFn: async () => {
-             const res = await axios.get('/api/personas/');
-             return res.data;
-        }
+             if (campaignId) {
+                 const data = await request<{ campaign: { personas: Persona[] } }>(GET_CAMPAIGN_PERSONAS, { id: campaignId });
+                 return data.campaign?.personas || [];
+             } 
+             return []; // No global view for now, or implement global GraphQL query later
+        },
+        enabled: !!campaignId // Only fetch if we have a campaign
     });
 
-    // Extract all quotes from all personas
-    // Memoizing this might be good, but React Query handles data stability well enough for now.
-    // If performance issues arise, we can wrap this in useMemo dependent on 'personas'.
+    // Extract quotes from personas
     const allQuotes: QuoteItem[] = personas.flatMap(persona => {
-        if (!persona.memorable_quotes) return [];
-        return persona.memorable_quotes.split('\n')
-            .filter(line => line.trim())
-            .flatMap(line => {
-                const match = line.match(/^\[(.*?)\] (.*)$/);
-                let context = null;
-                let content = line;
-                
-                if (match) {
-                    context = match[1];
-                    content = match[2];
-                }
+        const quotes: QuoteItem[] = [];
 
-                let items = [content];
-
-                // Attempt to parse python-style list string: "['Item 1', 'Item 2']"
-                // Check if it starts/ends with brackets and looks like a list
-                if (content.trim().startsWith('[') && content.trim().endsWith(']')) {
-                    const inner = content.trim().slice(1, -1);
-                    // Match quoted strings. Captures single or double quoted strings.
-                    const listMatch = [...inner.matchAll(/(["'])(?:(?=(\\?))\2.)*?\1/g)];
-                    if (listMatch.length > 0) {
-                        items = listMatch.map(m => {
-                             // Remove surrounding quotes and unescape
-                             return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
-                        });
-                    }
-                }
-
-                return items.map(text => ({
-                    id: Math.random().toString(36).substr(2, 9), // Temp ID. Since we don't have stable IDs for these derived quotes, keys might be unstable on refetch.
+        // 1. New Relational Quotes (GraphQL)
+        // @ts-ignore - Runtime check for mixed data types
+        if (persona.quotes && Array.isArray(persona.quotes)) {
+            // @ts-ignore
+            persona.quotes.forEach((q: any) => {
+                quotes.push({
+                    id: `q-${q.id}`,
                     persona: persona,
-                    context,
-                    // Clean up specific raw text issues if they persist (outer quotes etc)
-                    text: text.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, '') 
-                }));
+                    context: null,
+                    text: q.text
+                });
             });
+        }
+        
+        return quotes;
     });
 
     const filteredQuotes = allQuotes.filter(q => 
@@ -73,6 +59,14 @@ export default function QuoteList() {
 
     if (isLoading) return <div className="p-12 text-center text-slate-500 flex justify-center"><Loader2 className="animate-spin text-purple-500" /></div>;
 
+    if (!campaignId) {
+        return (
+            <div className="p-12 text-center text-slate-500">
+                Please select a campaign to view quotes.
+            </div>
+        );
+    }
+
     return (
         <div className="p-8 max-w-5xl mx-auto">
              <header className="mb-8">
@@ -81,6 +75,7 @@ export default function QuoteList() {
                     <span>Echoes of the Realm</span>
                 </h2>
                 <p className="text-slate-400 mb-6">Memorable words spoken by friends and foes alike.</p>
+                <div className="inline-block bg-purple-900/30 text-purple-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-4 border border-purple-500/30">Current Campaign</div>
 
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />

@@ -12,6 +12,8 @@ import re
 import difflib
 from dotenv import load_dotenv
 from pathlib import Path
+from typing import List, Optional
+from pydantic import BaseModel, Field
 
 # Load environment variables
 env_path = Path(__file__).parent / ".env"
@@ -56,44 +58,56 @@ def wait_for_files_active(files):
             time.sleep(5)
     print("...all files ready")
 
+# --- Pydantic Schemas for Structured Output ---
+
+class QuoteSchema(BaseModel):
+    speaker: str = Field(description="Name of the speaker. Do not use 'Unknown' unless absolutely necessary. Infer from context.")
+    quote: str = Field(description="The exact quote content. capture ONLY funny or genuinely memorable quotes.")
+    reasoning: str = Field(description="Chain-of-thought: Why did you assign this speaker? What context cues (voice, name mention, topic) did you use?")
+
+class PersonaSchema(BaseModel):
+    name: str
+    role: str = Field(description="PC, NPC, DM, or Monster")
+    player_name: Optional[str] = Field(default=None, description="Real name of the player if PC")
+    description: str = Field(description="Physical and personality description")
+    voice_description: Optional[str] = Field(default=None, description="Detailed description of their voice and mannerisms.")
+    highlights: List[str] = Field(default_factory=list, description="Character-specific achievements")
+    low_points: List[str] = Field(default_factory=list, description="Character-specific failures")
+    # We don't ask for quotes here to avoid duplication. We will infer 'Persona Quotes' from the main list by matching speaker names.
+
+class MomentSchema(BaseModel):
+    title: str
+    description: str
+    timestamp: Optional[str] = None
+
+class SessionAnalysis(BaseModel):
+    summary: str = Field(description="A detailed narrative summary (at least 1000 words).")
+    highlights: List[str] = Field(description="General session highlights.")
+    low_points: List[str] = Field(description="General session low points.")
+    memorable_quotes: List[QuoteSchema] = Field(description="List of funny or memorable quotes.")
+    personas: List[PersonaSchema] = Field(description="List of all characters identified.")
+    moments: List[MomentSchema] = Field(description="Key epic or funny moments.")
+
 SYSTEM_PROMPT = """
-You are an expert D&D Campaign Archivist. Your goal is to process a game session (either audio or text summary) and extract structured data.
+You are an expert D&D Campaign Archivist. Your goal is to process a game session and extract structured data.
+
 CRITICAL INSTRUCTION: You MUST process the audio/text from the very beginning to the very end.
-Ensure you capture events, quotes, and highlights from the ENTIRE recording.
-There may be multiple files to process, and you should process them in order.
-For the audio, try to discern the events that are occuring in the game vs events that are occuring in the real world (outside the game).
-For the audio, there may also be superfluous noise and/or events in the real world (outside the game) that can and should be ignored.
-Do not be concise. Provide as much detail as possible.
-A good summary WILL have at least 1000 words and 5 paragraphs.
 
-OUTPUT FORMAT (JSON):
-{
-    "summary": "A detailed summary of the event.",
-    "highlights": ["Highlight 1", "Highlight 2", "Highlight 3"],
-    "low_points": ["Low point 1", "Low point 2"],
-    "memorable_quotes": [
-        {"speaker": "Name", "quote": "The quote content"}
-    ],
-    "personas": [
-        {
-            "name": "Name",
-            "role": "PC/NPC/DM/Monster",
-            "player_name": "Real life name of the player (if PC)",
-            "description": "Physical and personality description",
-            "voice_description": "How they sound",
-            "highlights": ["List of character-specific achievements in this session"],
-            "low_points": ["List of character-specific failures in this session"],
-            "memorable_quotes": ["List of quotes by this character"]
-        }
-    ],
-  "moments": [
-    {"title": "Epic Moment", "description": "What happened", "timestamp": "MM:SS"}
-  ]
-}
+### SPEAKER IDENTIFICATION PROTOCOL
+1.  **Context Clues**: Listen for other players saying names (e.g., "Good job, Grog!").
+2.  **Voice Consistency**: Track distinct voices. If a deep rasping voice is established as "The King", ensure all subsequent lines with that voice are attributed to "The King".
+3.  **Ambiguity**: If you are unsure, explain your reasoning in the `reasoning` field of the quote before making a best guess. DO NOT output "Unknown Speaker" if a reasonable guess can be made from context.
+4.  **Double Check**: Before finalizing a speaker, ask yourself: "Does this make sense for this character? Is this their voice?"
 
-NOTES:
-- Identify speakers by name if mentioned, or context.
-- For "voice_description", be descriptive about how they sound (e.g. "Gritty, deep voice with a slight irish accent").
+### QUOTE SELECTION CRITERIA
+-   **Funny**: Quotes that caused laughter at the table.
+-   **Memorable**: Epic one-liners, crucial plot revelations, or emotional turning points.
+-   **Strict Filter**: Do NOT transcribe mundane table talk (e.g., "Pass the chips", "What do I roll?"). logic.
+
+### OUTPUT REQUIREMENTS
+-   **Summary**: Comprehensive, at least 1000 words.
+-   **Personas**: extract details for every character that speaks or is important.
+
 """
 
 
@@ -342,6 +356,7 @@ CRITICAL INSTRUCTIONS FOR PERSONAS:
                                 )
                             )
                         
+
                         response = client.models.generate_content(
                             model=model_name,
                             contents=[
@@ -352,63 +367,55 @@ CRITICAL INSTRUCTIONS FOR PERSONAS:
                             ],
                             config=types.GenerateContentConfig(
                                 system_instruction=system_instruction,
-                                response_mime_type="application/json"
+                                response_mime_type="application/json",
+                                response_schema=SessionAnalysis
                             )
                         )
                         
-                        # Validate JSON immediately
+                        # Validate JSON
                         try:
-                            # Pre-validate structure
-                            data = clean_and_parse_json(response.text)
-                            if isinstance(data, list):
-                                # Unwrap list if needed (though clean_and_parse might have done it, 
-                                # if it returned a list, we accept it if it matches our schema or just take first)
-                                if len(data) > 0 and isinstance(data[0], dict):
-                                    data = data[0]
-                                else:
-                                    raise ValueError("Returned JSON is a list but does not contain a dictionary.")
-
-                            if not isinstance(data, dict):
-                                raise ValueError(f"Expected dictionary, got {type(data)}")
+                            # With response_schema, response.parsed should be available/reliable
+                            if response.parsed:
+                                # Convert Pydantic model to dict
+                                data = response.parsed.model_dump()
+                            else:
+                                # Fallback to manual parsing if parsed isn't populated (SDK version dependent)
+                                data = clean_and_parse_json(response.text)
                             
                             print(f"[Session {session_id}] Success with model: {model_name}")
-                            break # Exit retry loop on success
+                            break 
                         except Exception as json_e:
                             print(f"[Session {session_id}] JSON Parse/Validation failed for {model_name}: {json_e}")
-                            print(f"Raw text chunk: {response.text[:200]}...")
                             if attempt < max_retries:
-                                continue # Retry
+                                continue 
                             else:
-                                raise json_e # Will be caught by outer except, effectively moving to next model
+                                raise json_e 
 
                     except Exception as e:
-                        # Handle specific GenAI errors
                         if isinstance(e, ClientError):
-                            if e.code == 429: # Resource Exhausted
+                            if e.code == 429: 
                                 if attempt < max_retries:
-                                    print(f"[Session {session_id}] Rate limited on {model_name} (Attempt {attempt+1}/{max_retries+1}). Retrying in {retry_delay}s...")
+                                    print(f"[Session {session_id}] Rate limited on {model_name}. Retrying in {retry_delay}s...")
                                     time.sleep(retry_delay)
-                                    retry_delay = min(retry_delay * 1.5, 300) # Exponential backoff capped at 5 mins
+                                    retry_delay = min(retry_delay * 1.5, 300) 
                                     continue
                                 else:
-                                    print(f"[Session {session_id}] Rate limited on {model_name} after {max_retries+1} attempts. Moving to next model...")
-                                    break # wrong break? no, this breaks inner retry loop, goes to next model
+                                    print(f"[Session {session_id}] Rate limited. Moving to next model...")
+                                    break 
                             
-                            elif e.code == 404: # Model not found
+                            elif e.code == 404: 
                                 print(f"[Session {session_id}] Model {model_name} not found. Skipping.")
-                                break # Break inner loop, try next model
+                                break 
                             
-                            elif e.code == 400: # Invalid Argument (likely Context Window Exceeded)
-                                print(f"[Session {session_id}] Model {model_name} failed with 400 (likely token limit). Trying next model...")
-                                break # Break inner loop, try next model
+                            elif e.code == 400: 
+                                print(f"[Session {session_id}] Model {model_name} failed with 400. Trying next model...")
+                                break 
                         
-                        # For other exceptions or unhandled codes
                         print(f"[Session {session_id}] Error with {model_name}: {e}") 
-                        # Try next model
                         break 
 
                 if response and 'data' in locals() and data:
-                    break # Break outer loop if we got a response AND valid data
+                    break 
             
             if not response or 'data' not in locals() or not data:
                 raise Exception(f"Failed to generate valid content with all attempted models: {models_to_try}")
@@ -441,7 +448,10 @@ CRITICAL INSTRUCTIONS FOR PERSONAS:
             session_entry.summary = data.get("summary", "No summary generated.")
             session_entry.highlights = format_field(data.get("highlights"))
             session_entry.low_points = format_field(data.get("low_points"))
-            session_entry.memorable_quotes = format_field(data.get("memorable_quotes"))
+            session_entry.memorable_quotes = "" # We now use relational table
+            
+            db.add(session_entry)
+            db.commit()
             
             db.add(session_entry)
             db.commit()
@@ -485,7 +495,7 @@ def save_content_to_db(session_id: int, data: dict, db):
     # Personas (Upsert Logic)
     for p_data in data.get("personas", []):
         # 1. Try to match by Exact Name (Case Insensitive)
-        statement = select(Persona).where(col(Persona.name).ilike(p_data["name"]))
+        statement = select(Persona).where(col(Persona.name).ilike(p_data["name"])).where(Persona.campaign_id == campaign_id)
         existing_persona = db.exec(statement).first()
         
         # 2. If no match, try to match by checking if new name is a substring of existing names (e.g. "Gwen" -> "Gwendolyn")
@@ -565,28 +575,33 @@ def save_content_to_db(session_id: int, data: dict, db):
                 )
                 db.add(new_lp)
         
-        # Save Quotes
-        quotes_data = p_data.get("memorable_quotes", [])
-        if isinstance(quotes_data, list):
-             for item in quotes_data:
-                content = ""
-                speaker = None
-                
-                if isinstance(item, dict):
-                    content = item.get("quote", "")
-                    speaker = item.get("speaker")
-                elif isinstance(item, str):
-                    content = item
-                
-                if content:
-                    new_qt = Quote(
-                        text=content,
-                        speaker_name=speaker,
-                        session_id=session_id,
-                        persona_id=current_persona_id,
-                        campaign_id=campaign_id
-                    )
-                    db.add(new_qt)
+
+
+    # Save Main Session Quotes
+    for q_data in data.get("memorable_quotes", []):
+        # Handle dict (QuoteSchema)
+        if isinstance(q_data, dict):
+            quote_text = q_data.get("quote", "")
+            speaker = q_data.get("speaker", "Unknown")
+            reasoning = q_data.get("reasoning", "")
+            
+            # Find persona match
+            persona_id = None
+            if speaker:
+                # Try simple match
+                persona_match = db.exec(select(Persona).where(col(Persona.name).ilike(speaker)).where(Persona.campaign_id == campaign_id)).first()
+                if persona_match:
+                    persona_id = persona_match.id
+            
+            new_qt = Quote(
+                text=quote_text,
+                speaker_name=speaker,
+                session_id=session_id,
+                persona_id=persona_id,
+                campaign_id=campaign_id
+            )
+            # We could store reasoning if we added a column, but for now we just use it for the AI's internal process
+            db.add(new_qt)
             
     # Moments
     for m_data in data.get("moments", []):
@@ -638,18 +653,17 @@ def process_text_session_pipeline(session_id: int, db_engine):
                         model=model_name,
                         contents=[SYSTEM_PROMPT, f"Here is the text summary (or transcript) of the session:\n\n{text_content}"],
                         config=types.GenerateContentConfig(
-                            response_mime_type="application/json"
+                            response_mime_type="application/json",
+                            response_schema=SessionAnalysis
                         )
                     )
                     
                     # Validate JSON
                     try:
-                        result_json = clean_and_parse_json(response.text)
-                        if isinstance(result_json, list):
-                             if len(result_json) > 0 and isinstance(result_json[0], dict):
-                                 result_json = result_json[0]
-                             else:
-                                 raise ValueError("Returned JSON is a list but does not contain a dictionary.")
+                        if response.parsed:
+                           result_json = response.parsed.model_dump()
+                        else:
+                           result_json = clean_and_parse_json(response.text)
                         
                         if not isinstance(result_json, dict):
                             raise ValueError(f"Expected dictionary, got {type(result_json)}")
@@ -704,7 +718,7 @@ def process_text_session_pipeline(session_id: int, db_engine):
             session_entry.summary = result_json.get("summary", "No summary generated.")
             session_entry.highlights = format_field(result_json.get("highlights"))
             session_entry.low_points = format_field(result_json.get("low_points"))
-            session_entry.memorable_quotes = format_field(result_json.get("memorable_quotes"))
+            session_entry.memorable_quotes = "" # Use relational
             
             db.add(session_entry)
             db.commit()

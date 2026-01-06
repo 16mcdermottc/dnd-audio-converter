@@ -6,3 +6,5 @@ sqlmodel
 google-genai
 python-dotenv
 aiofiles
+strawberry-graphql
+pydantic

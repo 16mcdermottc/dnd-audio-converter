@@ -3,9 +3,15 @@ import axios from 'axios';
 import { GitMerge, Loader2, Pencil, Quote, Scroll, Shield, Trash2, TrendingDown, TrendingUp, User, X } from 'lucide-react';
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
+import { useParams } from 'react-router-dom';
 import { Persona } from '../types';
+import { request } from '../utils/graphql';
+import { GET_CAMPAIGN_PERSONAS } from '../graphql/queries';
 
 export default function PersonaList() {
+  const { id } = useParams();
+  const campaignId = id ? parseInt(id) : null;
+
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -31,20 +37,25 @@ export default function PersonaList() {
 
   // Query
   const { data: personas = [], isLoading } = useQuery<Persona[]>({
-    queryKey: ['personas'],
+    queryKey: ['personas', campaignId],
     queryFn: async () => {
-      const res = await axios.get('/api/personas/');
-      return res.data;
-    }
+      if (campaignId) {
+          const data = await request<{ campaign: { personas: Persona[] } }>(GET_CAMPAIGN_PERSONAS, { id: campaignId });
+          return data.campaign?.personas || [];
+      }
+      return [];
+    },
+    enabled: !!campaignId
   });
 
   // Mutations
   const createPersonaMutation = useMutation({
     mutationFn: async (newPersona: typeof formData) => {
-      return axios.post('/api/personas/', newPersona);
+      const payload = { ...newPersona, campaign_id: campaignId }; 
+      return axios.post('/api/personas/', payload);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['personas'] });
+      queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
       resetForm();
     },
     onError: (err) => {
@@ -58,7 +69,7 @@ export default function PersonaList() {
       return axios.put(`/api/personas/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['personas'] });
+      queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
       resetForm();
     },
     onError: (err) => {
@@ -72,7 +83,7 @@ export default function PersonaList() {
       return axios.delete(`/api/personas/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['personas'] });
+      queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
     },
     onError: (err) => {
       console.error(err);
@@ -88,7 +99,7 @@ export default function PersonaList() {
        });
     },
     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ['personas'] });
+       queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
        setMergeSource(null);
        setMergeMode(false);
        alert("Merge successful");
@@ -109,7 +120,7 @@ export default function PersonaList() {
   };
 
   const handleEdit = (persona: Persona) => {
-      if (mergeMode) return; // Disable edit in merge mode
+      if (mergeMode) return; 
       setFormData({
           name: persona.name,
           role: persona.role,
@@ -137,16 +148,13 @@ export default function PersonaList() {
   // Merge Logic
   const handleMergeClick = (persona: Persona) => {
       if (!mergeSource) {
-          // Select Source
           setMergeSource(persona);
       } else {
-          // Select Target
           if (persona.id === mergeSource.id) {
-              // Deselect if clicking same
               setMergeSource(null);
               return;
           }
-          executeMerge(persona); // persona is Target
+          executeMerge(persona); 
       }
   };
 
@@ -164,6 +172,14 @@ export default function PersonaList() {
 
   const pcPersonas = filteredPersonas.filter(p => p.role === 'PC');
   const npcPersonas = filteredPersonas.filter(p => p.role !== 'PC');
+  
+  if (!campaignId) {
+    return (
+        <div className="p-12 text-center text-slate-500">
+            Please select a campaign to view personas.
+        </div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
@@ -433,39 +449,77 @@ function PersonaCard({ persona, onEdit, onDelete, mergeMode, isMergeSource, onMe
 
         {/* Character Arc Stats */}
         <div className="space-y-3 mt-4 pt-4 border-t border-slate-700/50">
-            {persona.highlights && (
+            {/* Structured Highlights */}
+            {persona.highlights && Array.isArray(persona.highlights) && persona.highlights.length > 0 && (
+                <>
+                    {/* High Points */}
+                    {persona.highlights.some(h => h.type === 'high') && (
+                        <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-3">
+                            <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
+                                <TrendingUp size={12} /> HIGHLIGHTS
+                            </h4>
+                            <ul className="text-xs text-green-200/80 list-disc pl-4 space-y-1">
+                                {persona.highlights.filter(h => h.type === 'high').map((h, i) => (
+                                    <li key={h.id || i}>{h.text}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+
+                    {/* Low Points */}
+                    {persona.highlights.some(h => h.type === 'low') && (
+                        <div className="bg-red-900/10 border border-red-500/20 rounded-lg p-3">
+                            <h4 className="text-xs font-bold text-red-400 mb-2 flex items-center gap-1">
+                                <TrendingDown size={12} /> LOW POINTS
+                            </h4>
+                            <ul className="text-xs text-red-200/80 list-disc pl-4 space-y-1">
+                                {persona.highlights.filter(h => h.type === 'low').map((h, i) => (
+                                    <li key={h.id || i}>{h.text}</li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                </>
+            )}
+
+            {/* Legacy String Fallback for Highlights (If needed, check type) */}
+            {persona.highlights && typeof persona.highlights === 'string' && (
                 <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-3">
-                    <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
-                        <TrendingUp size={12} /> HIGHLIGHTS
+                     <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
+                        <TrendingUp size={12} /> HIGHLIGHTS (Legacy)
                     </h4>
                     <div className="text-xs text-green-200/80">
-                        {persona.highlights.split('\n').filter(line => line.trim()).map((line, i) => (
+                        {(persona.highlights as string).split('\n').filter(line => line.trim()).map((line, i) => (
                              <FormattedPointLine key={i} line={line} titleColor="text-green-400" />
                         ))}
                     </div>
                 </div>
             )}
-            
-            {persona.low_points && (
-                <div className="bg-red-900/10 border border-red-500/20 rounded-lg p-3">
-                    <h4 className="text-xs font-bold text-red-400 mb-2 flex items-center gap-1">
-                        <TrendingDown size={12} /> LOW POINTS
+
+            {/* Structured Quotes */}
+            {persona.quotes && Array.isArray(persona.quotes) && persona.quotes.length > 0 && (
+                <div className="bg-slate-900/40 border border-slate-700 rounded-lg p-3 italic">
+                    <h4 className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1 not-italic">
+                        <Quote size={12} /> QUOTES
                     </h4>
-                    <div className="text-xs text-red-200/80">
-                        {persona.low_points.split('\n').filter(line => line.trim()).map((line, i) => (
-                             <FormattedPointLine key={i} line={line} titleColor="text-red-400" />
+                    <div className="space-y-2 text-xs text-slate-400">
+                        {persona.quotes.map((q, i) => (
+                            <p key={q.id || i}>
+                                &quot;{q.text}&quot;
+                            </p>
                         ))}
                     </div>
                 </div>
             )}
 
-            {persona.memorable_quotes && (
+            {/* Legacy String Quotes */}
+            {persona.memorable_quotes && typeof persona.memorable_quotes === 'string' && (
                 <div className="bg-slate-900/40 border border-slate-700 rounded-lg p-3 italic">
                     <h4 className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1 not-italic">
-                        <Quote size={12} /> QUOTES
+                        <Quote size={12} /> QUOTES (Legacy)
                     </h4>
                     <div className="text-xs text-slate-400">
-                         {persona.memorable_quotes.split('\n').filter(line => line.trim()).map((line, i) => (
+                         {(persona.memorable_quotes as string).split('\n').filter(line => line.trim()).map((line, i) => (
                              <FormattedQuoteLine key={i} line={line} />
                         ))}
                     </div>
