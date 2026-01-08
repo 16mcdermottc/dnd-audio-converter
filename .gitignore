@@ -56,3 +56,9 @@ uploads/
 backend/uploads/
 available_models.txt
 available_models_utf8.txt
+
+# Alembic
+alembic/versions/*.pyc
+
+# Frontend build
+frontend/dist/

@@ -1,6 +1,11 @@
 
-export const parseListString = (content: string): string[] => {
+export const parseListString = (content: string | unknown): string[] => {
     if (!content) return [];
+    if (typeof content !== 'string') {
+        // If it's already an array, return it (best effort)
+        if (Array.isArray(content)) return content.map(String);
+        return [];
+    }
     const trimmed = content.trim();
 
     // Check for Python-style list string: ['Item 1', 'Item 2']

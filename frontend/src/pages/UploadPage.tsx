@@ -2,13 +2,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import axios, { AxiosError } from 'axios';
 import { FileAudio, FileText, Loader2, UploadCloud } from 'lucide-react';
 import React, { useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams, useParams } from 'react-router-dom';
 
 export default function UploadPage() {
   const [searchParams] = useSearchParams();
+  const { campaignId: paramCampaignId } = useParams();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const campaignId = searchParams.get('campaign_id');
+  const campaignId = paramCampaignId || searchParams.get('campaign_id');
   
   const [activeTab, setActiveTab] = useState<'audio' | 'text'>('audio');
   const [sessionName, setSessionName] = useState('');
@@ -94,7 +95,7 @@ export default function UploadPage() {
   const isUploading = uploadAudioMutation.isPending || importTextMutation.isPending;
 
   return (
-    <div className="p-8 max-w-4xl mx-auto">
+    <div className="py-8 px-8 w-full mx-auto">
       <header className="mb-8">
         <h2 className="text-3xl font-bold text-white mb-2">Add New Session</h2>
         <p className="text-slate-400">Upload audio recordings or text summaries.</p>

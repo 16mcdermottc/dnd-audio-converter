@@ -8,6 +8,6 @@ export const graphQLClient = new GraphQLClient(API_URL, {
   },
 });
 
-export const request = async <T>(query: string, variables?: Record<string, any>): Promise<T> => {
+export const request = async <T>(query: string, variables?: Record<string, unknown>): Promise<T> => {
     return graphQLClient.request<T>(query, variables);
 };

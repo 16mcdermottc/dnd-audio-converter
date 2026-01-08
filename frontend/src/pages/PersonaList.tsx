@@ -1,352 +1,430 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import axios from 'axios';
-import { GitMerge, Loader2, Pencil, Quote, Scroll, Shield, Trash2, TrendingDown, TrendingUp, User, X } from 'lucide-react';
+import { MasonryGrid } from '../components/common/MasonryGrid';
+import { ArrowLeft, GitMerge, Plus, Search, Users } from 'lucide-react';
 import React, { useState } from 'react';
-import ReactMarkdown from 'react-markdown';
-import { useParams } from 'react-router-dom';
-import { Persona } from '../types';
-import { request } from '../utils/graphql';
+import { Link, useParams } from 'react-router-dom';
+import PersonaManagerCard from '../components/persona/PersonaManagerCard';
+import { CREATE_PERSONA, DELETE_PERSONA, MERGE_PERSONAS, UPDATE_PERSONA } from '../graphql/mutations';
 import { GET_CAMPAIGN_PERSONAS } from '../graphql/queries';
+import { Campaign, Persona } from '../types';
+import { request } from '../utils/graphql';
 
 export default function PersonaList() {
   const { id } = useParams();
-  const campaignId = id ? parseInt(id) : null;
-
+  const campaignId = parseInt(id || '0');
   const queryClient = useQueryClient();
-  const [showForm, setShowForm] = useState(false);
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  // Merge State
+
+  const [search, setSearch] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
   const [mergeMode, setMergeMode] = useState(false);
   const [mergeSource, setMergeSource] = useState<Persona | null>(null);
   
-  const [formData, setFormData] = useState<{
-      name: string;
-      role: string;
-      description: string;
-      voice_description: string;
-      player_name: string;
-  }>({
-      name: '',
-      role: 'NPC',
-      description: '',
-      voice_description: '',
-      player_name: ''
+  // Form State
+  const [formData, setFormData] = useState<Partial<Persona>>({ 
+      name: '', role: 'NPC', description: '', voice_description: '', player_name: '',
+      gender: '', race: '', class_name: '', level: 0, status: 'Alive', faction: '', alignment: ''
   });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [aliasInput, setAliasInput] = useState('');
 
-  // Query
-  const { data: personas = [], isLoading } = useQuery<Persona[]>({
-    queryKey: ['personas', campaignId],
+  // Queries
+  const { data, isLoading } = useQuery<{ campaign: Campaign }>({
+    queryKey: ['campaign-personas', campaignId],
     queryFn: async () => {
-      if (campaignId) {
-          const data = await request<{ campaign: { personas: Persona[] } }>(GET_CAMPAIGN_PERSONAS, { id: campaignId });
-          return data.campaign?.personas || [];
-      }
-      return [];
+      return request<{ campaign: Campaign }>(GET_CAMPAIGN_PERSONAS, { id: campaignId });
     },
     enabled: !!campaignId
   });
 
+  const personas = data?.campaign?.personas || [];
+  const campaignName = data?.campaign?.name;
+
   // Mutations
-  const createPersonaMutation = useMutation({
-    mutationFn: async (newPersona: typeof formData) => {
-      const payload = { ...newPersona, campaign_id: campaignId }; 
-      return axios.post('/api/personas/', payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
-      resetForm();
-    },
-    onError: (err) => {
-      console.error(err);
-      alert("Failed to create persona");
-    }
-  });
-
-  const updatePersonaMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: number, data: typeof formData }) => {
-      return axios.put(`/api/personas/${id}`, data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
-      resetForm();
-    },
-    onError: (err) => {
-      console.error(err);
-      alert("Failed to update persona");
-    }
-  });
-
-  const deletePersonaMutation = useMutation({
-    mutationFn: async (id: number) => {
-      return axios.delete(`/api/personas/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
-    },
-    onError: (err) => {
-      console.error(err);
-      alert("Failed to delete persona");
-    }
-  });
-
-  const mergePersonaMutation = useMutation({
-    mutationFn: async ({ targetId, sourceId }: { targetId: number, sourceId: number }) => {
-       return axios.post('/api/personas/merge', {
-           target_persona_id: targetId,
-           source_persona_id: sourceId
+  const { mutate: createPersona } = useMutation({
+    mutationFn: async (newPersona: Partial<Persona>) => {
+       return request(CREATE_PERSONA, { 
+           input: { 
+               name: newPersona.name, 
+               role: newPersona.role, 
+               description: newPersona.description, 
+               voice_description: newPersona.voice_description,
+               player_name: newPersona.player_name,
+               campaign_id: campaignId,
+               gender: newPersona.gender,
+               race: newPersona.race,
+               class_name: newPersona.class_name,
+               level: newPersona.level,
+                status: newPersona.status,
+               faction: newPersona.faction,
+               alignment: newPersona.alignment,
+               aliases: newPersona.aliases
+           } 
        });
     },
     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ['personas', campaignId] });
-       setMergeSource(null);
-       setMergeMode(false);
-       alert("Merge successful");
+        queryClient.invalidateQueries({ queryKey: ['campaign-personas', campaignId] });
+        setIsCreating(false);
+        resetForm();
     },
-    onError: (err) => {
-       console.error(err);
-       alert("Failed to merge personas. ensure both exist.");
+    onError: () => {
+        alert("Failed to create persona");
     }
   });
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const { mutate: updatePersona } = useMutation({
+    mutationFn: async (vars: {id: number, input: Partial<Persona>}) => {
+       return request(UPDATE_PERSONA, { 
+           id: vars.id,
+           input: { 
+               name: vars.input.name, 
+               role: vars.input.role, 
+               description: vars.input.description, 
+               voice_description: vars.input.voice_description,
+               player_name: vars.input.player_name,
+               campaign_id: campaignId,
+               gender: vars.input.gender,
+               race: vars.input.race,
+               class_name: vars.input.class_name,
+               level: vars.input.level,
+               status: vars.input.status,
+               faction: vars.input.faction,
+               alignment: vars.input.alignment,
+               aliases: vars.input.aliases
+           } 
+       });
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['campaign-personas', campaignId] });
+        setIsCreating(false);
+        resetForm();
+    },
+    onError: () => alert("Failed to update persona")
+  });
+
+  const { mutate: deletePersona } = useMutation({
+    mutationFn: async (id: number) => {
+       return request(DELETE_PERSONA, { id });
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['campaign-personas', campaignId] });
+    },
+    onError: () => alert("Failed to delete persona")
+  });
+
+  const { mutate: mergePersonas } = useMutation({
+    mutationFn: async (vars: {targetId: number, sourceId: number}) => {
+       return request(MERGE_PERSONAS, { targetId: vars.targetId, sourceId: vars.sourceId });
+    },
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['campaign-personas', campaignId] });
+        setMergeMode(false);
+        setMergeSource(null);
+        alert("Personas merged successfully!");
+    },
+    onError: () => alert("Failed to merge personas")
+  });
+
+
+  // Handlers
+  const handleSubmit = (e: React.FormEvent) => {
       e.preventDefault();
+      const aliasesArray = aliasInput.split(',').map(s => s.trim()).filter(s => s);
+      const submissionData = { ...formData, aliases: aliasesArray };
+
       if (editingId) {
-         updatePersonaMutation.mutate({ id: editingId, data: formData });
+          updatePersona({ id: editingId, input: submissionData });
       } else {
-         createPersonaMutation.mutate(formData);
+          createPersona(submissionData);
       }
   };
 
   const handleEdit = (persona: Persona) => {
-      if (mergeMode) return; 
       setFormData({
           name: persona.name,
           role: persona.role,
-          description: persona.description || '',
-          voice_description: persona.voice_description || '',
-          player_name: persona.player_name || ''
+          description: persona.description,
+          voice_description: persona.voice_description,
+          player_name: persona.player_name,
+          gender: persona.gender,
+          race: persona.race,
+          class_name: persona.class_name,
+          level: persona.level,
+          status: persona.status,
+          faction: persona.faction,
+          alignment: persona.alignment,
+          aliases: persona.aliases
       });
+      setAliasInput(persona.aliases?.join(', ') || '');
       setEditingId(persona.id);
-      setShowForm(true);
+      setIsCreating(true);
+      // Scroll to top
       window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleDelete = async (id: number) => {
-      if (mergeMode) return;
-      if (!window.confirm("Are you sure you want to delete this persona?")) return;
-      deletePersonaMutation.mutate(id);
+  const handleDelete = (id: number) => {
+      if(window.confirm("Are you sure? This will delete the persona and generic highlights associated with them.")) {
+          deletePersona(id);
+      }
   };
 
-  const resetForm = () => {
-      setShowForm(false);
-      setEditingId(null);
-      setFormData({ name: '', role: 'NPC', description: '', voice_description: '', player_name: '' });
-  };
-
-  // Merge Logic
   const handleMergeClick = (persona: Persona) => {
       if (!mergeSource) {
           setMergeSource(persona);
       } else {
-          if (persona.id === mergeSource.id) {
-              setMergeSource(null);
+          if (mergeSource.id === persona.id) {
+              setMergeSource(null); // Deselect
               return;
           }
-          executeMerge(persona); 
+          if (window.confirm(`Merge ${mergeSource.name} INTO ${persona.name}? This cannot be undone.`)) {
+              mergePersonas({ targetId: persona.id, sourceId: mergeSource.id });
+          }
       }
   };
 
-  const executeMerge = async (targetPersona: Persona) => {
-      if (!mergeSource) return;
-      if (!window.confirm(`Merge "${mergeSource.name}" into "${targetPersona.name}"? This cannot be undone.`)) {
-          return;
-      }
-      mergePersonaMutation.mutate({ targetId: targetPersona.id, sourceId: mergeSource.id });
+  const resetForm = () => {
+      setFormData({ name: '', role: 'NPC', description: '', voice_description: '', player_name: '' });
+      setAliasInput('');
+      setEditingId(null);
   };
+
+
 
   const filteredPersonas = personas.filter(p => 
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+      p.name.toLowerCase().includes(search.toLowerCase()) || 
+      p.role.toLowerCase().includes(search.toLowerCase())
   );
 
-  const pcPersonas = filteredPersonas.filter(p => p.role === 'PC');
-  const npcPersonas = filteredPersonas.filter(p => p.role !== 'PC');
-  
-  if (!campaignId) {
-    return (
-        <div className="p-12 text-center text-slate-500">
-            Please select a campaign to view personas.
-        </div>
-    );
-  }
+  if (isLoading) return <div className="p-12 text-center text-slate-500">Loading Personas...</div>;
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
-      <header className="mb-8 flex justify-between items-end">
-         <div>
-            <h2 className="text-3xl font-bold text-white mb-2">Dramatis Personae</h2>
-            <p className="text-slate-400">The heroes, villains, and bystanders of your tale.</p>
-         </div>
-         <div className="flex gap-3 items-center">
-             <input 
-                type="text" 
-                placeholder="Search personas..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-purple-500 transition-colors w-48"
-             />
-              <button 
-                onClick={() => {
-                    setMergeMode(!mergeMode);
-                    setMergeSource(null);
-                    setShowForm(false);
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                    mergeMode 
-                    ? 'bg-amber-600 hover:bg-amber-500 text-white shadow-lg shadow-amber-900/20' 
-                    : 'bg-slate-700 hover:bg-slate-600 text-slate-200'
-                }`}
-            >
-                {mergeMode ? <X size={18} /> : <GitMerge size={18} />}
-                {mergeMode ? 'Cancel Merge' : 'Merge Mode'}
-            </button>
-            
-            {!mergeMode && (
-                <button 
-                   onClick={() => {
-                       if (showForm) resetForm();
-                       else setShowForm(true);
-                   }}
-                   className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-                >
-                  {showForm ? 'Cancel' : 'Add Persona'}
-                </button>
-            )}
+    <div className="py-8 px-8 w-full mx-auto">
+      <div className="flex items-center justify-between mb-8">
+        <div>
+            <Link to={`/campaigns/${campaignId}`} className="text-slate-400 hover:text-white flex items-center mb-2 transition-colors">
+                <ArrowLeft size={16} className="mr-2" /> Back to Campaign
+            </Link>
+            <h1 className="text-3xl font-bold text-white flex items-center gap-3">
+                <Users className="text-purple-400" />
+                {campaignName}: Dramatis Personae
+            </h1>
         </div>
-      </header>
-      
-      {/* Merge Mode Instructions */}
-      {mergeMode && (
-          <div className="mb-6 bg-amber-900/20 border border-amber-500/30 p-4 rounded-xl text-amber-200 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
-              <GitMerge className="text-amber-500" />
-              <div>
-                  <p className="font-bold">Merge Mode Active</p>
-                  <p className="text-sm opacity-80">
-                      {!mergeSource 
-                          ? "Select the duplicate/incorrect persona you want to REMOVE (Source)." 
-                          : `Selected "${mergeSource.name}". Now select the correct persona to KEEP (Target).`}
-                  </p>
-              </div>
-          </div>
-      )}
-      
-      {showForm && !mergeMode && (
-          <div className="mb-8 bg-slate-800 p-6 rounded-xl border border-slate-700 animate-in fade-in slide-in-from-top-4">
-            <h3 className="text-xl font-bold text-white mb-4">{editingId ? 'Edit Persona' : 'Create New Persona'}</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                        <label className="block text-sm text-slate-400 mb-1">Name</label>
-                        <input 
-                            type="text" 
-                            className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" 
+
+        <div className="flex gap-4">
+             <button 
+                onClick={() => { setMergeMode(!mergeMode); setMergeSource(null); }}
+                className={`px-4 py-2 rounded-lg font-bold flex items-center transition-all ${mergeMode ? 'bg-amber-600 text-white shadow-lg shadow-amber-900/20' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'}`}
+             >
+                <GitMerge size={18} className="mr-2" />
+                {mergeMode ? "Exit Merge Mode" : "Merge Personas"}
+             </button>
+             
+             <button 
+                onClick={() => { setIsCreating(!isCreating); resetForm(); }}
+                className="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded-lg font-bold flex items-center shadow-lg shadow-purple-900/20 transition-all"
+             >
+                <Plus size={18} className="mr-2" />
+                {isCreating ? "Cancel" : "Add Persona"}
+             </button>
+        </div>
+      </div>
+
+      {isCreating && (
+          <div className="mb-8 bg-slate-800 border border-slate-700 rounded-xl p-6 animate-in slide-in-from-top-4">
+              <h2 className="text-xl font-bold text-white mb-4">{editingId ? 'Edit Persona' : 'New Persona'}</h2>
+              <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  
+                  {/* Basic Info */}
+                  <div className="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <div>
+                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Name</label>
+                          <input 
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
                             value={formData.name}
-                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                            onChange={e => setFormData({...formData, name: e.target.value})}
                             required
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm text-slate-400 mb-1">Role</label>
-                        <select 
-                            className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" 
+                          />
+                      </div>
+                      <div>
+                          <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Role</label>
+                          <select 
+                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
                             value={formData.role}
-                            onChange={(e) => setFormData({...formData, role: e.target.value})}
-                        >
-                            <option value="NPC">NPC</option>
-                            <option value="PC">PC</option>
-                            <option value="DM">DM</option>
-                            <option value="Monster">Monster</option>
-                        </select>
-                    </div>
-                </div>
-                <div>
-                     <label className="block text-sm text-slate-400 mb-1">Description</label>
-                     <textarea 
-                         className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white h-24" 
-                         value={formData.description}
-                         onChange={(e) => setFormData({...formData, description: e.target.value})}
-                     />
-                </div>
-                <div>
-                     <label className="block text-sm text-slate-400 mb-1">Voice Description</label>
-                     <input 
-                         type="text"
-                         className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white" 
-                         placeholder="e.g. Deep, raspy, speaks in riddles"
-                         value={formData.voice_description}
-                         onChange={(e) => setFormData({...formData, voice_description: e.target.value})}
-                     />
-                </div>
-                <div className="flex justify-end gap-2 mt-4">
-                    <button 
-                        type="submit" 
-                        disabled={createPersonaMutation.isPending || updatePersonaMutation.isPending}
-                        className="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg font-bold"
-                    >
-                        {createPersonaMutation.isPending || updatePersonaMutation.isPending ? 'Saving...' : (editingId ? 'Update Persona' : 'Save Persona')}
-                    </button>
-                </div>
-            </form>
+                            onChange={e => setFormData({...formData, role: e.target.value})}
+                          >
+                              <option value="NPC">NPC</option>
+                              <option value="PC">Player Character</option>
+                              <option value="Villain">Villain</option>
+                              <option value="Monster">Monster</option>
+                          </select>
+                      </div>
+                  </div>
+
+                  {/* Identity Section */}
+                  <div className="md:col-span-2 bg-slate-900/50 p-4 rounded-lg border border-slate-700/50">
+                      <h3 className="text-sm font-bold text-slate-300 uppercase mb-3 flex items-center gap-2">
+                          <Users size={14} /> Identity & Stats
+                      </h3>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Race</label>
+                              <input 
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                value={formData.race || ''}
+                                onChange={e => setFormData({...formData, race: e.target.value})}
+                                placeholder="e.g. Elf"
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Gender</label>
+                              <input 
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                value={formData.gender || ''}
+                                onChange={e => setFormData({...formData, gender: e.target.value})}
+                                placeholder="e.g. Female"
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Faction</label>
+                              <input 
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                value={formData.faction || ''}
+                                onChange={e => setFormData({...formData, faction: e.target.value})}
+                                placeholder="e.g. Harpers"
+                              />
+                          </div>
+                          <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Alignment</label>
+                              <input 
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                value={formData.alignment || ''}
+                                onChange={e => setFormData({...formData, alignment: e.target.value})}
+                                placeholder="e.g. Chaotic Good"
+                              />
+                          </div>
+                           <div>
+                              <label className="block text-[10px] font-bold text-slate-500 uppercase mb-1">Status</label>
+                              <select
+                                className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                value={formData.status || 'Alive'}
+                                onChange={e => setFormData({...formData, status: e.target.value})}
+                              >
+                                  <option value="Alive">Alive</option>
+                                  <option value="Dead">Dead</option>
+                                  <option value="Missing">Missing</option>
+                                  <option value="Unknown">Unknown</option>
+                              </select>
+                          </div>
+                      </div>
+                  </div>
+
+                  {/* PC Specifics */}
+                  {formData.role === 'PC' && (
+                       <div className="md:col-span-2 bg-purple-900/10 p-4 rounded-lg border border-purple-500/20">
+                          <h3 className="text-sm font-bold text-purple-300 uppercase mb-3 flex items-center gap-2">
+                              <Users size={14} /> Player Character Details
+                          </h3>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              <div>
+                                  <label className="block text-[10px] font-bold text-purple-400/70 uppercase mb-1">Player Name</label>
+                                  <input 
+                                    className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                    value={formData.player_name || ''}
+                                    onChange={e => setFormData({...formData, player_name: e.target.value})}
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-[10px] font-bold text-purple-400/70 uppercase mb-1">Class</label>
+                                  <input 
+                                    className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                    value={formData.class_name || ''}
+                                    onChange={e => setFormData({...formData, class_name: e.target.value})}
+                                    placeholder="e.g. Wizard"
+                                  />
+                              </div>
+                              <div>
+                                  <label className="block text-[10px] font-bold text-purple-400/70 uppercase mb-1">Level</label>
+                                  <input 
+                                    type="number"
+                                    className="w-full bg-slate-800 border border-purple-500/30 rounded px-3 py-1.5 text-sm text-white focus:border-purple-500 outline-none"
+                                    value={formData.level || ''}
+                                    onChange={e => setFormData({...formData, level: parseInt(e.target.value) || 0})}
+                                    placeholder="e.g. 5"
+                                  />
+                              </div>
+                          </div>
+                      </div>
+                  )}
+
+                   <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Description</label>
+                      <textarea 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none min-h-[100px]"
+                        value={formData.description || ''}
+                        onChange={e => setFormData({...formData, description: e.target.value})}
+                      />
+                  </div>
+                   <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Aliases (Nicknames)</label>
+                      <input 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="e.g. The Big Guy, Red, Captain (comma separated)"
+                        value={aliasInput}
+                        onChange={e => setAliasInput(e.target.value)}
+                      />
+                  </div>
+                   <div className="md:col-span-2">
+                      <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Voice Description</label>
+                      <input 
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="e.g. Gravelly, deep, speaks slowly"
+                        value={formData.voice_description || ''}
+                        onChange={e => setFormData({...formData, voice_description: e.target.value})}
+                      />
+                  </div>
+                  
+                  <div className="md:col-span-2 flex justify-end gap-3">
+                      <button type="button" onClick={() => setIsCreating(false)} className="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
+                      <button type="submit" className="bg-purple-600 hover:bg-purple-500 text-white px-6 py-2 rounded-lg font-bold shadow-lg shadow-purple-900/20">
+                          {editingId ? 'Save Changes' : 'Create Persona'}
+                      </button>
+                  </div>
+              </form>
           </div>
       )}
 
-      {isLoading ? (
-        <div className="flex justify-center p-12">
-          <Loader2 className="animate-spin text-purple-500" size={40} />
-        </div>
-      ) : (
-        <div className="space-y-12">
-            
-            {/* Player Characters Section */}
-            {pcPersonas.length > 0 && (
-                <div>
-                     <h3 className="text-xl font-bold text-purple-400 mb-4 flex items-center gap-2 border-b border-purple-500/30 pb-2">
-                        <Shield size={20} /> Player Characters
-                     </h3>
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {pcPersonas.map(persona => (
-                            <PersonaCard 
-                                key={persona.id} 
-                                persona={persona} 
-                                onEdit={handleEdit}
-                                onDelete={handleDelete}
-                                mergeMode={mergeMode}
-                                isMergeSource={mergeSource?.id === persona.id}
-                                onMergeClick={handleMergeClick}
-                            />
-                        ))}
-                     </div>
-                </div>
-            )}
+      {/* Search & Grid */}
+      <div className="mb-6 relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+          <input 
+            className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:ring-2 focus:ring-purple-500 outline-none transition-all"
+            placeholder="Search characters by name or role..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+      </div>
 
-            {/* NPCs Section */}
-            {(npcPersonas.length > 0 || (pcPersonas.length === 0 && filteredPersonas.length === 0)) && (
-                <div>
-                     {pcPersonas.length > 0 && (
-                        <h3 className="text-xl font-bold text-slate-400 mb-4 flex items-center gap-2 border-b border-slate-700/50 pb-2">
-                           <User size={20} /> Non-Player Characters
-                        </h3>
-                     )}
-                     
-                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {filteredPersonas.length === 0 && !showForm ? (
-                            <div className="col-span-full text-center py-12 text-slate-500 bg-slate-800/50 rounded-xl border border-dashed border-slate-700">
-                                {searchQuery ? "No personas found matching your search." : "No personas discovered yet. Upload a session or add one manually!"}
-                            </div>
-                        ) : (
-                            npcPersonas.map(persona => (
-                                <PersonaCard 
+      {/* Sections */}
+      {(() => {
+          const pcPersonas = filteredPersonas.filter(p => p.role === 'PC');
+          const monsterPersonas = filteredPersonas.filter(p => p.role === 'Monster' || p.role === 'Villain');
+          const npcPersonas = filteredPersonas.filter(p => p.role !== 'PC' && p.role !== 'Monster' && p.role !== 'Villain');
+
+          const hasResults = filteredPersonas.length > 0;
+
+          if (!hasResults) return null;
+
+          return (
+              <div className="space-y-12">
+                  {/* PCs */}
+                  {pcPersonas.length > 0 && (
+                      <section>
+                          <h2 className="text-xl font-bold text-purple-400 mb-6 flex items-center gap-2 border-b border-purple-500/20 pb-2">
+                              <Users size={20} /> Player Characters
+                          </h2>
+                          <MasonryGrid<Persona>
+                            items={pcPersonas}
+                            renderItem={(persona) => (
+                                <PersonaManagerCard 
                                     key={persona.id} 
                                     persona={persona} 
                                     onEdit={handleEdit}
@@ -355,270 +433,65 @@ export default function PersonaList() {
                                     isMergeSource={mergeSource?.id === persona.id}
                                     onMergeClick={handleMergeClick}
                                 />
-                            ))
-                        )}
-                     </div>
-                </div>
-            )}
-        </div>
-      )}
-    </div>
-  );
-}
+                            )}
+                          />
+                      </section>
+                  )}
 
-interface PersonaCardProps {
-  persona: Persona;
-  onEdit: (p: Persona) => void;
-  onDelete: (id: number) => void;
-  mergeMode: boolean;
-  isMergeSource: boolean;
-  onMergeClick: (p: Persona) => void;
-}
+                  {/* NPCs */}
+                  {npcPersonas.length > 0 && (
+                      <section>
+                          <h2 className="text-xl font-bold text-blue-400 mb-6 flex items-center gap-2 border-b border-blue-500/20 pb-2">
+                              <Users size={20} /> Non-Player Characters
+                          </h2>
+                          <MasonryGrid<Persona>
+                            items={npcPersonas}
+                            renderItem={(persona) => (
+                                <PersonaManagerCard 
+                                    key={persona.id} 
+                                    persona={persona} 
+                                    onEdit={handleEdit}
+                                    onDelete={handleDelete}
+                                    mergeMode={mergeMode}
+                                    isMergeSource={mergeSource?.id === persona.id}
+                                    onMergeClick={handleMergeClick}
+                                />
+                            )}
+                          />
+                      </section>
+                  )}
 
-function PersonaCard({ persona, onEdit, onDelete, mergeMode, isMergeSource, onMergeClick }: PersonaCardProps) {
-  const isPC = persona.role === 'PC';
-  
-  return (
-    <div 
-        className={`bg-slate-800 rounded-xl border overflow-hidden transition-all shadow-lg group relative
-            ${isMergeSource ? 'border-amber-500 ring-2 ring-amber-500/50 scale-[0.98] opacity-80' : 'border-slate-700 hover:border-purple-500/50'}
-            ${mergeMode && !isMergeSource ? 'cursor-pointer hover:border-amber-400 hover:scale-[1.01]' : ''}
-        `}
-        onClick={() => {
-            if (mergeMode) onMergeClick(persona);
-        }}
-    >
-      <div className={`h-2 ${isPC ? 'bg-purple-500' : 'bg-slate-600'}`} />
+                  {/* Monsters */}
+                  {monsterPersonas.length > 0 && (
+                      <section>
+                          <h2 className="text-xl font-bold text-red-400 mb-6 flex items-center gap-2 border-b border-red-500/20 pb-2">
+                              <GitMerge size={20} className="rotate-90" /> Adversaries & Monsters
+                          </h2>
+                          <MasonryGrid<Persona>
+                              items={monsterPersonas}
+                              renderItem={(persona) => (
+                                  <PersonaManagerCard 
+                                      key={persona.id} 
+                                      persona={persona} 
+                                      onEdit={handleEdit}
+                                      onDelete={handleDelete}
+                                      mergeMode={mergeMode}
+                                      isMergeSource={mergeSource?.id === persona.id}
+                                      onMergeClick={handleMergeClick}
+                                  />
+                              )}
+                          />
+                      </section>
+                  )}
+              </div>
+          );
+      })()}
       
-      {/* Merge Indicator Overlay */}
-      {mergeMode && (
-          <div className="absolute inset-0 bg-slate-900/10 z-10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                {isMergeSource ? (
-                    <span className="bg-amber-600 text-white px-3 py-1 rounded-full font-bold shadow-lg">Source (Will be Deleted)</span>
-                ) : (
-                    <span className="bg-green-600 text-white px-3 py-1 rounded-full font-bold shadow-lg">Target (Merge Here)</span>
-                )}
+      {filteredPersonas.length === 0 && (
+          <div className="text-center py-12 text-slate-500 italic">
+              No matching characters found in the archives.
           </div>
       )}
-
-      {/* Actions */}
-      {!mergeMode && (
-          <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-900/80 p-1 rounded-lg backdrop-blur-sm z-20">
-              <button 
-                onClick={(e) => { e.stopPropagation(); onEdit(persona); }}
-                className="p-1.5 text-slate-300 hover:text-purple-400 hover:bg-slate-800 rounded transition-colors"
-                title="Edit"
-              >
-                  <Pencil size={16} />
-              </button>
-              <button 
-                onClick={(e) => { e.stopPropagation(); onDelete(persona.id); }}
-                className="p-1.5 text-slate-300 hover:text-red-400 hover:bg-slate-800 rounded transition-colors"
-                title="Delete"
-              >
-                  <Trash2 size={16} />
-              </button>
-          </div>
-      )}
-
-      <div className="p-6">
-        <div className="flex justify-between items-start mb-4">
-          <div className="p-3 bg-slate-900 rounded-lg">
-             {isPC ? <Shield className="text-purple-400" size={24} /> : <User className="text-slate-400" size={24} />}
-          </div>
-          <span className={`text-xs font-bold px-2 py-1 rounded uppercase tracking-wider ${isPC ? 'bg-purple-900/30 text-purple-300' : 'bg-slate-700 text-slate-300'}`}>
-            {persona.role}
-          </span>
-        </div>
-        
-        <h3 className="text-xl font-bold text-white mb-1">{persona.name}</h3>
-        {persona.player_name && isPC && (
-             <div className="text-sm text-purple-400 font-medium mb-2">Played by {persona.player_name}</div>
-        )}
-        
-        {/* Markdown Description */}
-        <div className="text-slate-400 text-sm mb-4 prose prose-invert prose-sm max-w-none">
-            <ReactMarkdown>{persona.description}</ReactMarkdown>
-        </div>
-        
-        {persona.voice_description && (
-             <div className="mb-4 text-xs text-purple-300 bg-purple-900/20 px-3 py-2 rounded border border-purple-500/20">
-                <span className="font-bold block mb-1">Voice:</span> {persona.voice_description}
-             </div>
-        )}
-
-        {/* Character Arc Stats */}
-        <div className="space-y-3 mt-4 pt-4 border-t border-slate-700/50">
-            {/* Structured Highlights */}
-            {persona.highlights && Array.isArray(persona.highlights) && persona.highlights.length > 0 && (
-                <>
-                    {/* High Points */}
-                    {persona.highlights.some(h => h.type === 'high') && (
-                        <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-3">
-                            <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
-                                <TrendingUp size={12} /> HIGHLIGHTS
-                            </h4>
-                            <ul className="text-xs text-green-200/80 list-disc pl-4 space-y-1">
-                                {persona.highlights.filter(h => h.type === 'high').map((h, i) => (
-                                    <li key={h.id || i}>{h.text}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-
-                    {/* Low Points */}
-                    {persona.highlights.some(h => h.type === 'low') && (
-                        <div className="bg-red-900/10 border border-red-500/20 rounded-lg p-3">
-                            <h4 className="text-xs font-bold text-red-400 mb-2 flex items-center gap-1">
-                                <TrendingDown size={12} /> LOW POINTS
-                            </h4>
-                            <ul className="text-xs text-red-200/80 list-disc pl-4 space-y-1">
-                                {persona.highlights.filter(h => h.type === 'low').map((h, i) => (
-                                    <li key={h.id || i}>{h.text}</li>
-                                ))}
-                            </ul>
-                        </div>
-                    )}
-                </>
-            )}
-
-            {/* Legacy String Fallback for Highlights (If needed, check type) */}
-            {persona.highlights && typeof persona.highlights === 'string' && (
-                <div className="bg-green-900/10 border border-green-500/20 rounded-lg p-3">
-                     <h4 className="text-xs font-bold text-green-400 mb-2 flex items-center gap-1">
-                        <TrendingUp size={12} /> HIGHLIGHTS (Legacy)
-                    </h4>
-                    <div className="text-xs text-green-200/80">
-                        {(persona.highlights as string).split('\n').filter(line => line.trim()).map((line, i) => (
-                             <FormattedPointLine key={i} line={line} titleColor="text-green-400" />
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Structured Quotes */}
-            {persona.quotes && Array.isArray(persona.quotes) && persona.quotes.length > 0 && (
-                <div className="bg-slate-900/40 border border-slate-700 rounded-lg p-3 italic">
-                    <h4 className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1 not-italic">
-                        <Quote size={12} /> QUOTES
-                    </h4>
-                    <div className="space-y-2 text-xs text-slate-400">
-                        {persona.quotes.map((q, i) => (
-                            <p key={q.id || i}>
-                                &quot;{q.text}&quot;
-                            </p>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* Legacy String Quotes */}
-            {persona.memorable_quotes && typeof persona.memorable_quotes === 'string' && (
-                <div className="bg-slate-900/40 border border-slate-700 rounded-lg p-3 italic">
-                    <h4 className="text-xs font-bold text-slate-500 mb-2 flex items-center gap-1 not-italic">
-                        <Quote size={12} /> QUOTES (Legacy)
-                    </h4>
-                    <div className="text-xs text-slate-400">
-                         {(persona.memorable_quotes as string).split('\n').filter(line => line.trim()).map((line, i) => (
-                             <FormattedQuoteLine key={i} line={line} />
-                        ))}
-                    </div>
-                </div>
-            )}
-        </div>
-
-        {persona.summary && (
-          <div className="mt-4 bg-slate-900/50 p-3 rounded-lg text-sm text-slate-300">
-            <Scroll size={14} className="inline mr-2 opacity-50 transition-opacity group-hover:opacity-100" />
-            <span className="opacity-70">Latest Summary:</span> {persona.summary}
-          </div>
-        )}
-      </div>
     </div>
   );
-}
-
-function FormattedQuoteLine({ line }: { line: string }) {
-    // Try to extract session header: [Session Name] Content
-    const match = line.match(/^\[(.*?)\] (.*)$/);
-    
-    let title = "";
-    let content = line;
-
-    if (match) {
-        title = match[1];
-        content = match[2];
-    } else {
-        // If no session match, maybe the whole line is the content (legacy data might lack header)
-        // Or check if the line itself looks like a header-less list
-        content = line;
-    }
-
-    let items = [content];
-
-    // Attempt to parse python-style list string: "['Item 1', 'Item 2']"
-    if (content.trim().startsWith('[') && content.trim().endsWith(']')) {
-        const inner = content.trim().slice(1, -1);
-        const listMatch = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
-        if (listMatch.length > 0) {
-            items = listMatch.map(m => {
-                 return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
-            });
-        }
-    }
-
-    return (
-        <div className="mb-3 last:mb-0">
-             {title && <div className="font-bold text-slate-600 opacity-70 mb-1 not-italic text-[10px] uppercase tracking-wide">{title}</div>}
-             <div className="space-y-1">
-                 {items.map((item, idx) => (
-                     <p key={idx} className="pl-1 text-slate-300">
-                        &quot;{item.replace(/^\[.*?\] /, '')}&quot;
-                     </p>
-                 ))}
-             </div>
-        </div>
-    );
-}
-
-function FormattedPointLine({ line, titleColor }: { line: string; titleColor: string }) {
-    const match = line.match(/^\[(.*?)\] (.*)$/);
-    
-    let title = "";
-    let content = line;
-
-    if (match) {
-        title = match[1];
-        content = match[2];
-    }
-
-    let items = [content];
-
-    // Attempt to parse python-style list string: "['Item 1', 'Item 2']"
-    if (content.trim().startsWith('[') && content.trim().endsWith(']')) {
-        const inner = content.trim().slice(1, -1);
-        // Match quoted strings. Captures single or double quoted strings.
-        const listMatch = [...inner.matchAll(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g)];
-        if (listMatch.length > 0) {
-            items = listMatch.map(m => {
-                 // Remove surrounding quotes and unescape
-                 return m[0].slice(1, -1).replace(/\\(['"])/g, '$1');
-            });
-        }
-    }
-
-    return (
-        <div className="mb-3 last:mb-0">
-             {title && <div className={`font-bold ${titleColor} opacity-90 mb-1 not-italic`}>{title}</div>}
-             {items.length === 1 ? (
-                 <p className="pl-1">{items[0]}</p>
-             ) : (
-                 <ul className="list-disc pl-5 space-y-1 text-opacity-90">
-                     {items.map((item, idx) => (
-                         <li key={idx}>{item}</li>
-                     ))}
-                 </ul>
-             )}
-        </div>
-    );
 }

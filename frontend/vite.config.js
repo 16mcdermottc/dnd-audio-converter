@@ -13,6 +13,15 @@ export default defineConfig({
         timeout: 300000, // 5 minutes
         proxyTimeout: 300000, // 5 minutes
       },
+      '/graphql': {
+        target: 'http://localhost:8000',
+        adjustOrigin: true,
+      }
     },
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/setupTests.ts',
   },
 })

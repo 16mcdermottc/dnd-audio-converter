@@ -32,6 +32,23 @@ export const GET_CAMPAIGN_DASHBOARD = gql`
         description
         voice_description
         summary
+        player_name
+        gender
+        race
+        class_name
+        level
+        status
+        faction
+        alignment
+        aliases
+      }
+      moments {
+        id
+        title
+        description
+        type
+        session_id
+        session_name
       }
     }
   }
@@ -50,9 +67,18 @@ export const GET_CAMPAIGN_PERSONAS = gql`
         voice_description
         summary
         player_name
+        gender
+        race
+        class_name
+        level
+        status
+        faction
+        alignment
+        aliases
         highlights {
             id
             text
+            name
             type
         }
         quotes {
@@ -73,9 +99,11 @@ export const GET_SESSION_DETAILS = gql`
       status
       summary
       created_at
+      campaign_id
       highlights {
         id
         text
+        name
         type
         persona_id
       }
@@ -99,9 +127,18 @@ export const GET_PERSONA_DETAILS = gql`
       voice_description
       summary
       player_name
+      gender
+      race
+      class_name
+      level
+      status
+      faction
+      alignment
+      aliases
       highlights {
         id
         text
+        name
         type
         session_id
       }
@@ -111,6 +148,16 @@ export const GET_PERSONA_DETAILS = gql`
         speaker_name
         session_id
       }
+    }
+  }
+`;
+
+export const UPDATE_PERSONA = gql`
+  mutation UpdatePersona($id: Int!, $input: PersonaInput!) {
+    update_persona(id: $id, input: $input) {
+      id
+      name
+      aliases
     }
   }
 `;

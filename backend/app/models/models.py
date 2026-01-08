@@ -1,13 +1,15 @@
 from datetime import datetime
 from typing import Optional, List
 from sqlmodel import Field, SQLModel, Relationship
+from .enums import ProcessingStatus
 
 # --- Base/Read Models to break circular dependencies ---
+
 
 class HighlightRead(SQLModel):
     id: int
     text: str
-    type: str
+    type: str # 'high' or 'low'
     session_id: int
     campaign_id: int
 
@@ -17,6 +19,12 @@ class QuoteRead(SQLModel):
     speaker_name: Optional[str]
     session_id: int
     campaign_id: int
+
+class SessionAudioFile(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    session_id: int = Field(foreign_key="session.id")
+    file_path: str
+    session: "Session" = Relationship(back_populates="audio_files")
 
 # -------------------------------------------------------
 
@@ -39,19 +47,18 @@ class Session(SQLModel, table=True):
     name: str
     created_at: datetime = Field(default_factory=datetime.now)
     audio_file_paths: Optional[str] = Field(default=None, description="JSON list of file paths") 
-    status: str = Field(default="pending")  # pending, processing, completed, error
+    status: ProcessingStatus = Field(default=ProcessingStatus.PENDING)  # pending, processing, completed, error
+    error_message: Optional[str] = Field(default=None, description="Error details if status is error")
     
     campaign: Campaign = Relationship(back_populates="sessions")
-    moments: List["Moment"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
-    summary: Optional[str] = Field(default=None, description="AI generated summary of the session")
-
-    # New Fields for Session-level Reference
-    highlights: Optional[str] = Field(default=None, description="Key events/highlights of the session")
-    low_points: Optional[str] = Field(default=None, description="Failures/low points of the session")
-    memorable_quotes: Optional[str] = Field(default=None, description="Memorable quotes from the session")
     
-    highlights_list: List["Highlight"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
-    quotes_list: List["Quote"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    # Relationships
+    audio_files: List["SessionAudioFile"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    moments: List["Moment"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    highlights: List["Highlight"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    quotes: List["Quote"] = Relationship(back_populates="session", sa_relationship_kwargs={"cascade": "all, delete-orphan"})
+    
+    summary: Optional[str] = Field(default=None, description="AI generated summary of the session")
 
 class Transcript(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -66,40 +73,46 @@ class PersonaBase(SQLModel):
     role: str # PC, NPC, DM, Monster
     description: str
     voice_description: Optional[str] = Field(default=None)
+    gender: Optional[str] = Field(default=None)
+    race: Optional[str] = Field(default=None)
+    class_name: Optional[str] = Field(default=None, description="Character class (e.g., Wizard, Fighter)")
+    alignment: Optional[str] = Field(default=None)
+    level: Optional[int] = Field(default=None)
+    status: str = Field(default="Alive", description="Alive, Dead, Missing, etc.")
+    status: str = Field(default="Alive", description="Alive, Dead, Missing, etc.")
+    faction: Optional[str] = Field(default=None)
+    aliases: Optional[str] = Field(default="[]", description="JSON list of aliases/nicknames")
+
     player_name: Optional[str] = Field(default=None, description="Name of the player running this character (if PC)")
     campaign_id: int = Field(foreign_key="campaign.id")
     session_id: Optional[int] = Field(default=None, foreign_key="session.id") 
     summary: Optional[str] = None
     
-    # New Fields for tracking character arc
-    highlights: Optional[str] = Field(default=None, description="List of high points/achievements")
-    low_points: Optional[str] = Field(default=None, description="List of low points/failures")
-    memorable_quotes: Optional[str] = Field(default=None, description="List of memorable quotes")
-
 class Persona(PersonaBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     
     campaign: Campaign = Relationship(back_populates="personas")
     
-    highlights_list: List["Highlight"] = Relationship(back_populates="persona")
-    quotes_list: List["Quote"] = Relationship(back_populates="persona")
+    highlights: List["Highlight"] = Relationship(back_populates="persona")
+    quotes: List["Quote"] = Relationship(back_populates="persona")
 
 class PersonaRead(PersonaBase):
     id: int
-    highlights_list: List[HighlightRead] = []
-    quotes_list: List[QuoteRead] = []
+    highlights: List[HighlightRead] = []
+    quotes: List[QuoteRead] = []
 
 class Highlight(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     text: str
+    name: Optional[str] = Field(default=None, description="Display name for the highlight (e.g. character name)")
     type: str = Field(default="high") # 'high' or 'low'
     
     session_id: int = Field(foreign_key="session.id")
     persona_id: Optional[int] = Field(default=None, foreign_key="persona.id")
     campaign_id: int = Field(foreign_key="campaign.id")
     
-    session: Session = Relationship(back_populates="highlights_list")
-    persona: Optional[Persona] = Relationship(back_populates="highlights_list")
+    session: Session = Relationship(back_populates="highlights")
+    persona: Optional[Persona] = Relationship(back_populates="highlights")
     campaign: Campaign = Relationship(back_populates="highlights")
 
 class Quote(SQLModel, table=True):
@@ -111,8 +124,8 @@ class Quote(SQLModel, table=True):
     persona_id: Optional[int] = Field(default=None, foreign_key="persona.id")
     campaign_id: int = Field(foreign_key="campaign.id")
     
-    session: Session = Relationship(back_populates="quotes_list")
-    persona: Optional[Persona] = Relationship(back_populates="quotes_list")
+    session: Session = Relationship(back_populates="quotes")
+    persona: Optional[Persona] = Relationship(back_populates="quotes")
     campaign: Campaign = Relationship(back_populates="quotes")
     
 class Moment(SQLModel, table=True):
@@ -120,7 +133,6 @@ class Moment(SQLModel, table=True):
     session_id: int = Field(foreign_key="session.id")
     title: str
     description: str
-    timestamp: Optional[str] = None
     type: str = Field(default="highlight") # highlight, funny, fail, rule_cool
     
     session: Session = Relationship(back_populates="moments")

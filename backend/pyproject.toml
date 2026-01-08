@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "dnd-audio-converter-backend"
+version = "0.1.0"
+description = "Backend for D&D Audio Converter"
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "backend"}]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.109.0"
+uvicorn = "^0.27.0"
+python-multipart = "^0.0.9"
+sqlalchemy = "^2.0.25"
+sqlmodel = "^0.0.14"
+google-genai = "^0.2.1"
+python-dotenv = "^1.0.1"
+aiofiles = "^23.2.1"
+strawberry-graphql = "^0.219.0"
+pydantic = "^2.6.0"
+pydantic-settings = "^2.1.0"
+asyncpg = "^0.29.0"
+aiosqlite = "^0.19.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0.0"
+mypy = "^1.8.0"
+black = "^24.1.0"
+isort = "^5.13.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -6,6 +6,7 @@ export interface Campaign {
   summary?: string;
   sessions?: Session[];
   personas?: Persona[];
+  moments?: Moment[];
 }
 
 export interface Session {
@@ -16,9 +17,10 @@ export interface Session {
   audio_file_paths: string;
   status: string;
   summary?: string;
-  highlights?: string;
+  highlights?: string | Highlight[];
   low_points?: string;
   memorable_quotes?: string;
+  quotes?: Quote[];
 }
 
 export interface Persona {
@@ -35,6 +37,17 @@ export interface Persona {
   quotes?: Quote[];
   summary?: string;
   player_name?: string;
+  
+  // Extended fields
+  gender?: string;
+  race?: string;
+  class_name?: string;
+  level?: number;
+  status?: string;
+  faction?: string;
+  alignment?: string;
+  aliases?: string[];
+
   highlights_list?: Highlight[];
   quotes_list?: Quote[];
 }
@@ -42,6 +55,7 @@ export interface Persona {
 export interface Highlight {
   id: number;
   text: string;
+  name?: string;
   type: 'high' | 'low';
   session_id: number;
   persona_id?: number;
@@ -62,5 +76,6 @@ export interface Moment {
   session_id: number;
   title: string;
   description: string;
-  timestamp: string;
+  type?: string; 
+  session_name?: string;
 }

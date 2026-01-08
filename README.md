@@ -12,96 +12,107 @@ A powerful tool for Dungeon Masters and players to archive, analyze, and manage 
 - **Audio Upload**: Upload game session recordings (mp3, wav, m4a).
 - **Text Import**: Import existing text summaries or logs.
 - **AI Processing**: Automatically generates summaries and key moments.
+- **Smart Upsert**: Intelligently merges new uploads into existing session summaries, refining the narrative rather than overwriting it.
 - **Batch Upload**: Queue multiple session files for processing.
 
 ### 🎭 Persona Management
 - **One-Click Extraction**: AI automatically identifies NPCs and PCs from sessions.
 - **Voice Profiles**: Captures detailed voice descriptions (accent, pitch, tone) from audio.
-- **Upsert Logic**: Intelligently updates existing profiles instead of creating duplicates.
 - **Manual Management**: Create, edit, and delete personas manually.
+- **Deduplication**: Automatically detects and prevents duplicate characters and highlights.
 
 ### 🤖 AI Pipeline
-- **Powered by Gemini**: Uses Google's `gemini-flash-latest` for fast, cost-effective analysis (configurable).
-- **Structured Output**: Returns JSON data for easy integration and display.
+- **Powered by Gemini**: Uses Google's `gemini-flash-latest` (configurable) for fast, cost-effective analysis.
+- **Context-Aware**: Uses existing campaign data (Personas, previous summaries) to generate accurate and consistent updates.
+- **Structured Output**: Returns JSON data for easy integration.
 
 ---
 
 ## Tech Stack
 
-- **Frontend**: React, Vite, TailwindCSS, Lucide Icons, React Markdown.
-- **Backend**: FastAPI, GraphQL, Uvicorn, Python-Multipart, Aiofiles.
-- **AI SDK**: `google-genai` (Official Google GenAI SDK).
+### Frontend
+- **Framework**: React 18 + Vite
+- **Styling**: TailwindCSS 3.4
+- **State/Data Fetching**: TanStack Query
+- **Routing**: React Router DOM 6
+- **Icons**: Lucide React
+- **Language**: TypeScript
+
+### Backend
+- **Framework**: FastAPI
+- **Database**: SQLModel (SQLite/PostgreSQL compatible) via AsyncPG/AIOSQLite
+- **AI SDK**: `google-genai` (Official Google GenAI SDK)
+- **GraphQL**: Strawberry GraphQL
+- **Dependency Management**: Poetry
+
+### Infrastructure
+- **Containerization**: Docker, Docker Compose
 
 ---
 
 ## Prerequisites
 
-- **Node.js** (v16+)
-- **Python** (v3.10+)
+- **Docker Desktop** (Recommended)
 - **Google Gemini API Key**: Get one at [aistudio.google.com](https://aistudio.google.com/).
 
 ---
 
-## Installation & Setup
+## Quick Start (Docker) - Recommended
 
-### 1. Clone the Repository
-```bash
-git clone git@github.com:16mcdermottc/dnd-audio-converter.git
-cd dnd-audio-converter
-```
+The easiest way to run the application is with Docker. This ensures FFmpeg and all system dependencies are correctly installed.
 
-### 2. Backend Setup
-Navigate to the backend directory and install dependencies.
-
-```bash
-cd backend
-# Recommended: Create a virtual environment
-python -m venv venv
-# Windows
-.\venv\Scripts\activate
-# Mac/Linux
-source venv/bin/activate
-
-# Install requirements
-pip install -r requirements.txt
-```
-
-**Environment Configuration:**
+### 1. Configure Environment
 Create a `.env` file in the `backend/` directory:
 ```env
 GEMINI_API_KEY=your_api_key_here
 ```
 
-### 3. Frontend Setup
-Navigate to the frontend directory and install dependencies.
-
+### 2. Run with Docker Compose
+From the root directory:
 ```bash
-cd ../frontend
-npm install
+docker-compose up --build
 ```
+
+Access the application at: **http://localhost:5173**
 
 ---
 
-## Running the Application
+## Manual Setup (Local Development)
 
-### Start the Backend
-From the root directory:
+If you prefer to run locally without Docker, you must install FFmpeg manually.
+
+### Prerequisites (Manual)
+- **Python** (v3.11+)
+- **Node.js** (v18+)
+- **FFmpeg**: Must be added to your system PATH.
+- **Poetry**: Python dependency manager.
+
+### 1. Backend Setup
+Navigate to the backend directory and install dependencies using Poetry.
 
 ```bash
-# Run with auto-reload enabled (ensure venv is activated if used)
-py -m uvicorn backend.main:app --reload --port 8000
+cd backend
+poetry install
+```
+
+**Run the Backend:**
+```bash
+poetry run uvicorn app.main:app --reload --port 8000
 ```
 *Note: The SQLite database `database.db` will be created in the root directory.*
 
-### Start the Frontend
-In a new terminal configuration (inside `frontend` directory):
+### 2. Frontend Setup
+Navigate to the frontend directory.
 
 ```bash
-cd frontend
-npm run dev
+cd ../frontend
+yarn install
 ```
 
-Open your browser to `http://localhost:5173`.
+**Run the Frontend:**
+```bash
+yarn dev
+```
 
 ---
 
@@ -115,7 +126,8 @@ Open your browser to `http://localhost:5173`.
     *   Select your file(s) and click Upload.
 3.  **Monitor Progress**: The session status will update from `uploaded` -> `processing` -> `completed` (or `error`).
 4.  **View Results**: Click on a completed session to see moments and extracted personas.
-5.  **Manage Personas**: Review the "Personas" tab in your campaign to see all characters. You can edit their details or voice descriptions manually.
+5.  **Refine**: Upload additional files to the same session to refine the summary using "Smart Upsert".
+6.  **Manage Personas**: Review the "Personas" tab in your campaign to see all characters. You can edit their details or voice descriptions manually.
 
 ---
 
