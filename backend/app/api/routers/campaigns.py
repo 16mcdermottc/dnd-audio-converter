@@ -43,3 +43,4 @@ def generate_campaign_summary(campaign_id: int, background_tasks: BackgroundTask
     
     background_tasks.add_task(generate_campaign_summary_pipeline, campaign_id, engine)
     return {"message": "Campaign summary generation started"}
+

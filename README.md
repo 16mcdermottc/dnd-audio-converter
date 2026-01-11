@@ -1,8 +1,15 @@
-# D&D Campaign Manager & AI Archivist
+# D&D Campaign Manager & AI Librarian
 
-A powerful tool for Dungeon Masters and players to archive, analyze, and manage their D&D campaigns. Accurate session logs, character personas, and voice descriptions are automatically extracted from audio recordings or text summaries using Google's Gemini AI.
+A powerful tool for Dungeon Masters and players to archive, analyze, and chat with their D&D campaigns. Accurate session logs, character personas, and voice descriptions are extracted from audio recordings using Google's Gemini AI, while a local RAG (Retrieval-Augmented Generation) system allows you to chat with your campaign history using **Ollama**.
 
 ## Features
+
+### 🧠 Local AI Librarian (New!)
+- **Chat with Your Campaign**: Ask specific questions ("Who did we meet in the tavern?", "What loot did Grog get?") and get grounded answers.
+- **Vector RAG System**: Uses a local SQLite vector store to index everything—session summaries, character bios, quotes, and moments.
+- **Infinite Context**: Intelligently retrieves only the relevant information, bypassing token limits.
+- **Auto-Indexing**: Automatically updates the search index whenever you modify a character or generate a new session summary.
+- **Local Privacy**: Runs entirely on your machine using **Ollama** (default model: `phi4`).
 
 ### 🏰 Campaign Management
 - **Multi-Campaign Architecture**: Organize sessions and characters into distinct campaigns.
@@ -11,20 +18,17 @@ A powerful tool for Dungeon Masters and players to archive, analyze, and manage 
 ### 📜 Session Archiving
 - **Audio Upload**: Upload game session recordings (mp3, wav, m4a).
 - **Text Import**: Import existing text summaries or logs.
-- **AI Processing**: Automatically generates summaries and key moments.
 - **Smart Upsert**: Intelligently merges new uploads into existing session summaries, refining the narrative rather than overwriting it.
-- **Batch Upload**: Queue multiple session files for processing.
 
 ### 🎭 Persona Management
 - **One-Click Extraction**: AI automatically identifies NPCs and PCs from sessions.
-- **Voice Profiles**: Captures detailed voice descriptions (accent, pitch, tone) from audio.
-- **Manual Management**: Create, edit, and delete personas manually.
+- **Voice Profiles**: Captures detailed voice descriptions (accent, pitch, tone).
+- **Auto-Indexing**: New characters are immediately searchable by the Chat Agent.
 - **Deduplication**: Automatically detects and prevents duplicate characters and highlights.
 
 ### 🤖 AI Pipeline
-- **Powered by Gemini**: Uses Google's `gemini-flash-latest` (configurable) for fast, cost-effective analysis.
+- **Session Processing (Gemini)**: Automatically generates session summaries, key moments, and highlights.
 - **Context-Aware**: Uses existing campaign data (Personas, previous summaries) to generate accurate and consistent updates.
-- **Structured Output**: Returns JSON data for easy integration.
 
 ---
 
@@ -34,61 +38,52 @@ A powerful tool for Dungeon Masters and players to archive, analyze, and manage 
 - **Framework**: React 18 + Vite
 - **Styling**: TailwindCSS 3.4
 - **State/Data Fetching**: TanStack Query
-- **Routing**: React Router DOM 6
-- **Icons**: Lucide React
+- **UI Components**: Lucide React
 - **Language**: TypeScript
 
 ### Backend
 - **Framework**: FastAPI
-- **Database**: SQLModel (SQLite/PostgreSQL compatible) via AsyncPG/AIOSQLite
-- **AI SDK**: `google-genai` (Official Google GenAI SDK)
-- **GraphQL**: Strawberry GraphQL
+- **Database**: SQLModel (SQLite) + VectorStore (for RAG)
+- **AI SDKs**: 
+  - `google-genai` (Cloud Analysis)
+  - `ollama` (Local Chat & Embeddings)
 - **Dependency Management**: Poetry
-
-### Infrastructure
-- **Containerization**: Docker, Docker Compose
 
 ---
 
 ## Prerequisites
 
-- **Docker Desktop** (Recommended)
-- **Google Gemini API Key**: Get one at [aistudio.google.com](https://aistudio.google.com/).
+1.  **Docker Desktop** (Recommended for easy setup)
+2.  **Google Gemini API Key**: Get one at [aistudio.google.com](https://aistudio.google.com/).
+3.  **Ollama**: Must be installed and running locally.
+    *   Download from [ollama.com](https://ollama.com).
+    *   Pull the required model: `ollama pull phi4`
 
 ---
 
-## Quick Start (Docker) - Recommended
+## Quick Start (Docker)
 
-The easiest way to run the application is with Docker. This ensures FFmpeg and all system dependencies are correctly installed.
+1.  **Configure Environment**:
+    Create a `.env` file in the `backend/` directory:
+    ```env
+    GEMINI_API_KEY=your_api_key_here
+    OLLAMA_HOST=http://host.docker.internal:11434
+    ```
 
-### 1. Configure Environment
-Create a `.env` file in the `backend/` directory:
-```env
-GEMINI_API_KEY=your_api_key_here
-```
+2.  **Run with Docker Compose**:
+    ```bash
+    docker-compose up --build
+    ```
 
-### 2. Run with Docker Compose
-From the root directory:
-```bash
-docker-compose up --build
-```
-
-Access the application at: **http://localhost:5173**
+3.  Access the application at: **http://localhost:5173**
 
 ---
 
 ## Manual Setup (Local Development)
 
-If you prefer to run locally without Docker, you must install FFmpeg manually.
-
-### Prerequisites (Manual)
-- **Python** (v3.11+)
-- **Node.js** (v18+)
-- **FFmpeg**: Must be added to your system PATH.
-- **Poetry**: Python dependency manager.
+If running locally (Windows/Mac/Linux), ensure **FFmpeg** is in your PATH.
 
 ### 1. Backend Setup
-Navigate to the backend directory and install dependencies using Poetry.
 
 ```bash
 cd backend
@@ -97,12 +92,11 @@ poetry install
 
 **Run the Backend:**
 ```bash
+# Ensure Ollama is running first ('ollama serve' or desktop app)
 poetry run uvicorn app.main:app --reload --port 8000
 ```
-*Note: The SQLite database `database.db` will be created in the root directory.*
 
 ### 2. Frontend Setup
-Navigate to the frontend directory.
 
 ```bash
 cd ../frontend
@@ -118,18 +112,12 @@ yarn dev
 
 ## Usage Guide
 
-1.  **Create a Campaign**: Start by creating a new campaign from the home page.
-2.  **Upload a Session**:
-    *   Go to your campaign.
-    *   Click "Upload Session".
-    *   Choose **Audio** (for recordings) or **Text** (for logs).
-    *   Select your file(s) and click Upload.
-3.  **Monitor Progress**: The session status will update from `uploaded` -> `processing` -> `completed` (or `error`).
-4.  **View Results**: Click on a completed session to see moments and extracted personas.
-5.  **Refine**: Upload additional files to the same session to refine the summary using "Smart Upsert".
-6.  **Manage Personas**: Review the "Personas" tab in your campaign to see all characters. You can edit their details or voice descriptions manually.
-
----
+1.  **Create a Campaign**: Start a new adventure log.
+2.  **Upload & Analyze**: Upload audio recordings. Gemini will transcribe and summarize them.
+3.  **Chat with Ioun**: Click the chat bubble in the bottom-right.
+    *   *First Time*: You may need to wait for the system to index existing sessions.
+    *   *Ask Questions*: "What is the name of the dragon?", "Summarize the last session."
+4.  **Refine**: Edit personas or summaries. The search index updates automatically!
 
 ## License
 GNU GPL 3.0

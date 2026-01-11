@@ -8,7 +8,7 @@ from .core.database import create_db_and_tables, get_session, Session as DBSessi
 from .graphql.schema import schema
 
 # Import Routers
-from .api.routers import campaigns, sessions, personas, highlights, uploads, moments
+from .api.routers import campaigns, sessions, personas, highlights, uploads, moments, chat
 
 # Initialize DB (Optional, or use a lifespan event)
 create_db_and_tables()
@@ -17,8 +17,8 @@ app = FastAPI(title="D&D Campaign Audio Manager")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], # Vite dev server
-    allow_credentials=True,
+    allow_origins=["*"], # Allow all origins/devices
+    allow_credentials=False, # Credentials not currently used/required
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -44,6 +44,7 @@ app.include_router(personas.router)
 app.include_router(highlights.router)
 app.include_router(moments.router)
 app.include_router(uploads.router)
+app.include_router(chat.router)
 
 @app.get("/")
 def read_root():

@@ -76,7 +76,7 @@ export default function SessionView() {
       
       setIsRegenerating(true);
       try {
-          const res = await fetch(`http://localhost:8000/sessions/${sessionId}/regenerate`, { method: 'POST' });
+          const res = await fetch(`/sessions/${sessionId}/regenerate`, { method: 'POST' });
           if (!res.ok) throw new Error("Failed");
           alert("Regeneration started in background. The status should update shortly.");
           queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
@@ -100,7 +100,7 @@ export default function SessionView() {
       });
 
       try {
-          const res = await fetch(`http://localhost:8000/reupload_session/${sessionId}`, {
+          const res = await fetch(`/reupload_session/${sessionId}`, {
               method: 'POST',
               body: formData
           });
@@ -139,7 +139,7 @@ export default function SessionView() {
   }
 
   return (
-    <div className="py-8 px-8 w-full mx-auto">
+    <div className="py-8 px-4 md:px-8 w-full mx-auto">
       <div className="mb-6">
         <Link to={`/campaigns/${session.campaign_id}`} className="inline-flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
             <ArrowLeft size={16} /> Back to Campaign
@@ -147,21 +147,21 @@ export default function SessionView() {
       </div>
 
       <div className="bg-slate-800 rounded-2xl p-8 border border-slate-700 shadow-xl">
-        <div className="flex justify-between items-start mb-4">
+        <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4">
             {isEditing ? (
                 <div className="w-full mr-4">
                     <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Session Name</label>
                     <input 
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white text-2xl font-bold focus:ring-2 focus:ring-purple-500 outline-none mb-4"
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white text-xl md:text-2xl font-bold focus:ring-2 focus:ring-purple-500 outline-none mb-4"
                         value={formData.name}
                         onChange={e => setFormData({...formData, name: e.target.value})}
                     />
                 </div>
             ) : (
-                <h1 className="text-4xl font-bold text-white">{session.name}</h1>
+                <h1 className="text-2xl md:text-4xl font-bold text-white">{session.name}</h1>
             )}
             
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
                 {isEditing ? (
                     <>
                         <button 

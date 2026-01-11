@@ -89,9 +89,9 @@ export function GenericEditableList<T>({
   if (isLoading) return <div className="p-12 text-center text-slate-500">Loading...</div>;
 
   return (
-    <div className="py-8 px-8 w-full mx-auto">
+    <div className="py-8 px-4 md:px-8 w-full mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
             {backLink && (
                 <Link to={backLink} className="text-slate-400 hover:text-white flex items-center mb-2 transition-colors">

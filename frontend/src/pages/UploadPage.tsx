@@ -33,7 +33,7 @@ export default function UploadPage() {
 
         // Bypass Vite proxy for large uploads to avoid timeouts
         // Note: keeping the localhost URL as per original. In prod this should be relative or env var driven.
-        return axios.post(`http://localhost:8000/upload_session/?name=${encodeURIComponent(sessionName)}&campaign_id=${campaignId}`, formData, {
+        return axios.post(`/upload_session/?name=${encodeURIComponent(sessionName)}&campaign_id=${campaignId}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
           timeout: 0,
           onUploadProgress: (progressEvent) => {
@@ -58,7 +58,7 @@ export default function UploadPage() {
   const importTextMutation = useMutation({
     mutationFn: async () => {
          if (!campaignId || !textContent || !sessionName) return;
-         return axios.post(`http://localhost:8000/import_session_text/`, {
+         return axios.post(`/import_session_text/`, {
             name: sessionName,
             content: textContent,
             campaign_id: parseInt(campaignId)

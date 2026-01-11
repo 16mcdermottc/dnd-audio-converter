@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ChevronDown, ChevronRight, Mic, Sparkles } from 'lucide-react';
+import { ChevronDown, ChevronRight, Sparkles } from 'lucide-react';
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { GENERATE_CAMPAIGN_SUMMARY } from '../../graphql/mutations';
@@ -33,6 +33,7 @@ export default function CampaignSummary({ campaign }: CampaignSummaryProps) {
         }
     });
 
+
     return (
         <section className="mb-8 bg-slate-800/40 rounded-xl border border-slate-700/50 overflow-hidden text-left">
             <div 
@@ -44,18 +45,20 @@ export default function CampaignSummary({ campaign }: CampaignSummaryProps) {
                     <Sparkles className="text-amber-400" size={24} />
                     <span>The Legend So Far</span>
                 </h2>
-                <button 
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        if (isGeneratingSummary) return;
-                        generateSummary();
-                    }}
-                    disabled={isGeneratingSummary}
-                    className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
-                >
-                    {isGeneratingSummary ? <Mic className="animate-pulse" size={14}/> : <Sparkles size={14} />}
-                    {campaign.summary ? "Regenerate Summary" : "Generate Summary"}
-                </button>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            if (isGeneratingSummary) return;
+                            generateSummary();
+                        }}
+                        disabled={isGeneratingSummary}
+                        className="text-xs bg-slate-700 hover:bg-slate-600 text-slate-300 px-3 py-1.5 rounded-md transition-colors flex items-center gap-2"
+                    >
+                        {isGeneratingSummary ? <Sparkles className="animate-pulse" size={14}/> : <Sparkles size={14} />}
+                        {campaign.summary ? "Regenerate" : "Generate"}
+                    </button>
+                </div>
             </div>
             
             {expanded && (

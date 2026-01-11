@@ -5,7 +5,7 @@ import { useParams, Link } from 'react-router-dom';
 import { Highlight } from '../types';
 import { MasonryGrid } from '../components/common/MasonryGrid';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = '';
 
 export default function HighlightList() {
     const { id } = useParams();

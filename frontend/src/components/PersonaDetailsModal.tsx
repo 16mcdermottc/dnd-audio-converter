@@ -89,7 +89,7 @@ const PersonaDetailsModal = memo(function PersonaDetailsModal({ persona, onClose
                         </button>
                 </div>
                 
-                <div className="p-8 space-y-8">
+                <div className="p-4 md:p-8 space-y-8">
                     {/* Description */}
                     <div className="prose prose-invert prose-slate max-w-none">
                         <ReactMarkdown>{persona.description}</ReactMarkdown>

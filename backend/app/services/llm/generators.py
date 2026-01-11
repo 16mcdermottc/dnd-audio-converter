@@ -81,7 +81,7 @@ def _save_analysis_to_db(session_id: int, data: Dict[str, Any], db: Session):
                     break
                 # Fuzzy
                 ratio = difflib.SequenceMatcher(None, name_query.lower(), cp.name.lower()).ratio()
-                if ratio > 0.80:
+                if ratio > 0.83:
                     existing_persona = cp
                     print(f"Fuzzy match: {name_query} ~= {cp.name} ({ratio:.2f})")
                     break
@@ -213,6 +213,15 @@ def _save_analysis_to_db(session_id: int, data: Dict[str, Any], db: Session):
     
     db.add(session_entry)
     db.commit()
+    
+    # Auto-Index Session Summary
+    if session_entry.summary:
+        try:
+            from .vector_store import VectorService
+            service = VectorService(db)
+            service.save_chunk(campaign_id, "session_summary", session_entry.id, f"Session {session_entry.name} Summary: {session_entry.summary}")
+        except Exception as e:
+            print(f"Failed to auto-index session summary: {e}")
 
 async def process_session_pipeline(session_id: int, db_engine):
     """Main Async Pipeline"""

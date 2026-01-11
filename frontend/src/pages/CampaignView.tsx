@@ -101,6 +101,7 @@ export default function CampaignView() {
   });
 
   const { mutate: updatePersona } = useMutation({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     mutationFn: async (vars: { id: number, input: any }) => {
         return request(UPDATE_PERSONA, vars);
     },
@@ -184,14 +185,14 @@ export default function CampaignView() {
   if (!campaign) return null;
 
   return (
-    <div className="py-8 px-8 w-full mx-auto">
+    <div className="py-8 px-4 md:px-8 w-full mx-auto">
         <Link to="/" className="inline-flex items-center text-purple-400 hover:text-purple-300 mb-6 transition-colors font-medium">
             <ArrowLeft size={16} className="mr-2" /> Back to Campaigns
         </Link>
         
-        <header className="flex justify-between items-start mb-10 border-b border-slate-700 pb-8">
+        <header className="flex flex-col md:flex-row justify-between items-start gap-4 mb-10 border-b border-slate-700 pb-8">
             <div>
-                <h1 className="text-4xl font-bold text-white mb-2">{campaign.name}</h1>
+                <h1 className="text-2xl md:text-4xl font-bold text-white mb-2">{campaign.name}</h1>
                 <p className="text-slate-400 max-w-2xl">{campaign.description}</p>
             </div>
             

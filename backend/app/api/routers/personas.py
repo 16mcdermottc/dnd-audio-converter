@@ -51,6 +51,22 @@ def create_persona(persona: Persona, db: DBSession = Depends(get_session)):
     db.add(persona)
     db.commit()
     db.refresh(persona)
+    
+    # Auto-Index Creation
+    try:
+        from ...services.llm.vector_store import VectorService
+        service = VectorService(db)
+        # Create a rich text representation
+        details = [f"Role: {persona.role}"]
+        if persona.gender: details.append(f"Gender: {persona.gender}")
+        if persona.race: details.append(f"Race: {persona.race}")
+        if persona.class_name: details.append(f"Class: {persona.class_name}")
+        
+        text = f"Character: {persona.name}. {' | '.join(details)}. {persona.description or ''} {persona.summary or ''}"
+        service.save_chunk(persona.campaign_id, "persona", persona.id, text)
+    except Exception as e:
+        print(f"Failed to auto-index new persona: {e}")
+        
     return persona
 
 @router.put("/{persona_id}", response_model=PersonaRead)
@@ -68,6 +84,22 @@ def update_persona(persona_id: int, persona_update: Persona, db: DBSession = Dep
     db.add(db_persona)
     db.commit()
     db.refresh(db_persona)
+    
+    # Auto-Index Update
+    try:
+        from ...services.llm.vector_store import VectorService
+        service = VectorService(db)
+        # Create a rich text representation
+        details = [f"Role: {db_persona.role}"]
+        if db_persona.gender: details.append(f"Gender: {db_persona.gender}")
+        if db_persona.race: details.append(f"Race: {db_persona.race}")
+        if db_persona.class_name: details.append(f"Class: {db_persona.class_name}")
+        
+        text = f"Character: {db_persona.name}. {' | '.join(details)}. {db_persona.description or ''} {db_persona.summary or ''}"
+        service.save_chunk(db_persona.campaign_id, "persona", db_persona.id, text)
+    except Exception as e:
+        print(f"Failed to auto-index persona update: {e}")
+        
     return db_persona
 
 @router.delete("/{persona_id}")

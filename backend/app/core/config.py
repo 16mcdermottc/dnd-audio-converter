@@ -6,6 +6,10 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str
     UPLOAD_DIR: str = "uploads"
     FFMPEG_PATH: str = "ffmpeg"  # Default to system 'ffmpeg' (e.g. in Docker)
+    
+    # Ollama settings for local chat agent
+    OLLAMA_HOST: str = "http://127.0.0.1:11434"
+    OLLAMA_MODEL: str = "phi4"
 
     class Config:
         # Look for .env in current dir, or in backend/ (for when running from root)

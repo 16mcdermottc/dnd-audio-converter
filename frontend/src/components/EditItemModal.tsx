@@ -66,7 +66,7 @@ export default function EditItemModal({ isOpen, onClose, item, personas, onSave 
                         <textarea 
                             value={text}
                             onChange={e => setText(e.target.value)}
-                            className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white focus:outline-none focus:border-purple-500 min-h-[100px]"
+                            className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white text-base focus:outline-none focus:border-purple-500 min-h-[100px]"
                             required
                         />
                     </div>
@@ -77,7 +77,7 @@ export default function EditItemModal({ isOpen, onClose, item, personas, onSave 
                             <select 
                                 value={personaId || ''}
                                 onChange={e => setPersonaId(e.target.value ? Number(e.target.value) : undefined)}
-                                className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white appearance-none focus:outline-none focus:border-purple-500"
+                                className="w-full bg-slate-800 border border-slate-600 rounded-lg p-3 text-white text-base appearance-none focus:outline-none focus:border-purple-500"
                             >
                                 <option value="">(None / General)</option>
                                 {personas.map(p => (

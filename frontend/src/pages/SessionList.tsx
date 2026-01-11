@@ -4,7 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { GenericEditableList } from '../components/common/GenericEditableList';
 import { Session } from '../types';
 
-const API_URL = 'http://localhost:8000'; 
+const API_URL = ''; 
 
 export default function SessionList() {
     const { id } = useParams();

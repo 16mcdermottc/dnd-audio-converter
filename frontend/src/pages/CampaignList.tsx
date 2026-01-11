@@ -13,12 +13,17 @@ export default function CampaignList() {
   const [showForm, setShowForm] = useState(false);
   const [newCampaignName, setNewCampaignName] = useState("");
 
-  const { data: campaignsData, isLoading: loading } = useQuery<{
+  const { data: campaignsData, isLoading: loading, error } = useQuery<{
     campaigns: Campaign[];
   }>({
     queryKey: ["campaigns"],
     queryFn: async () => {
-      return request<{ campaigns: Campaign[] }>(GET_CAMPAIGNS);
+      try {
+        return await request<{ campaigns: Campaign[] }>(GET_CAMPAIGNS);
+      } catch (err) {
+        console.error("Failed to fetch campaigns:", err);
+        throw err;
+      }
     },
   });
 
@@ -72,7 +77,7 @@ export default function CampaignList() {
 
   return (
     <div
-      className="py-8 px-8 w-full mx-auto min-h-screen bg-cover bg-center bg-fixed"
+      className="py-8 px-4 md:px-8 w-full mx-auto min-h-screen bg-cover bg-center bg-fixed"
       style={{ backgroundImage: "url('/quest_log_background.png')" }}
     >
       {/* Hero Banner */}
@@ -90,6 +95,20 @@ export default function CampaignList() {
       {loading ? (
         <div className="flex justify-center p-12">
           <Loader2 className="animate-spin text-purple-500" size={48} />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col justify-center items-center p-12 bg-red-900/50 rounded-xl border border-red-500 m-8">
+          <h3 className="text-xl font-bold text-red-200 mb-2">Failed to load campaigns</h3>
+          <p className="text-red-300 mb-4">{error.message}</p>
+          <pre className="text-xs text-red-400 bg-black/50 p-4 rounded w-full overflow-auto max-w-lg mb-4">
+            {JSON.stringify(error, null, 2)}
+          </pre>
+          <button 
+            onClick={() => queryClient.invalidateQueries({ queryKey: ["campaigns"] })}
+            className="px-4 py-2 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors"
+          >
+            Retry
+          </button>
         </div>
       ) : (
         <div>

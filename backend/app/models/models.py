@@ -136,3 +136,24 @@ class Moment(SQLModel, table=True):
     type: str = Field(default="highlight") # highlight, funny, fail, rule_cool
     
     session: Session = Relationship(back_populates="moments")
+
+class VectorStore(SQLModel, table=True):
+    """
+    Store for text chunks and their vector embeddings.
+    Used for local RAG (Retrieval Augmented Generation).
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    campaign_id: int = Field(foreign_key="campaign.id", index=True)
+    
+    # Source metadata
+    source_type: str = Field(index=True) # 'session_summary', 'persona', 'highlight', 'quote', 'moment'
+    source_id: int # ID of the session/persona/etc
+    
+    # The actual content to retrieve
+    text_content: str
+    
+    # The embedding vector (stored as JSON string of float list)
+    embedding_json: str
+    
+    created_at: datetime = Field(default_factory=datetime.now)
+
